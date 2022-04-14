@@ -1,0 +1,10 @@
+top 30(63)
+"bbdelta_close": 0.00924,
+        "bbdelta_tail": 0.99571,
+        "closedelta_close": 0.01857,
+        "rocr_1h": 0.71862,
+bawah 30(63)
+	"bbdelta_close": 0.00214,
+        "bbdelta_tail": 0.92907,
+        "closedelta_close": 0.01925,
+        "rocr_1h": 0.89391,
