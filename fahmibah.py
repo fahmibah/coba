@@ -10,9 +10,9 @@ import talib.abstract as ta
 
 from freqtrade.persistence import Trade
 from freqtrade.strategy.interface import IStrategy
-from freqtrade.strategy import merge_informative_pair, DecimalParameter, stoploss_from_open, RealParameter, IntParameter
+from freqtrade.strategy import merge_informative_pair, DecimalParameter, stoploss_from_open, RealParameter, IntParameter, BooleanParameter
 from pandas import DataFrame, Series
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 
 
 def bollinger_bands(stock_price, window_size, num_of_std):
@@ -108,6 +108,7 @@ class fahmibah(IStrategy):
     }
 
     # buy params ClucHA
+    clucha_enabled = BooleanParameter(default=buy_params['clucha_enabled'], space='buy', optimize=False)
     rocr_1h = DecimalParameter(0.5, 1.0, default=0.54904, space='buy', decimals=5, optimize=False)
     bbdelta_close = DecimalParameter(0.0005, 0.02, default=0.01965, space='buy', decimals=5, optimize=False)
     closedelta_close = DecimalParameter(0.0005, 0.02, default=0.00556, space='buy', decimals=5, optimize=False)
@@ -115,9 +116,10 @@ class fahmibah(IStrategy):
     close_bblower = DecimalParameter(0.0005, 0.02, default=0.00799, space='buy', decimals=5, optimize=False)
 
     # buy params lambo1
+    lambo1_enabled = BooleanParameter(default=buy_params['lambo1_enabled'], space='buy', optimize=False)
     lambo1_ema_14_factor = DecimalParameter(0.5, 2.0, default=1.054, space='buy', decimals=3, optimize=True)
-    lambo1_rsi_4_limit = IntParameter(0, 50, default=18, space='buy', optimize=True)
-    lambo1_rsi_14_limit = IntParameter(0, 50, default=39, space='buy', optimize=True)
+    lambo1_rsi_4_limit = IntParameter(0, 50, default=buy_params['lambo1_rsi_4_limit'], space='buy', optimize=True)
+    lambo1_rsi_14_limit = IntParameter(0, 50, default=buy_params['lambo1_rsi_14_limit'], space='buy', optimize=True)
 
     # hard stoploss profit
     pHSL = DecimalParameter(-0.500, -0.040, default=-0.08, decimals=3, space='sell', load=True)
@@ -188,8 +190,8 @@ class fahmibah(IStrategy):
 
         # lambo1
         dataframe['ema_14'] = ta.EMA(dataframe['ha_close'], timeperiod=14)
-        dataframe['rsi_4'] = ta.RSI(dataframe['ha_close'], timeperiod=4)
-        dataframe['rsi_14'] = ta.RSI(dataframe['ha_close'], timeperiod=14)
+        dataframe['rsi_4'] = ta.RSI(dataframe, timeperiod=4)
+        dataframe['rsi_14'] = ta.RSI(dataframe, timeperiod=14)
 
         inf_tf = '1h'
 
@@ -211,8 +213,8 @@ class fahmibah(IStrategy):
         lambo1 = (
             bool(self.lambo1_enabled.value) &
             (dataframe['ha_close'] < (dataframe['ema_14'] * self.lambo1_ema_14_factor.value)) &
-            (dataframe['rsi_4'] < self.lambo1_rsi_4_limit.value) &
-            (dataframe['rsi_14'] < self.lambo1_rsi_14_limit.value)
+            (dataframe['rsi_4'] < int(self.lambo1_rsi_4_limit.value)) &
+            (dataframe['rsi_14'] < int(self.lambo1_rsi_14_limit.value))
         )
         dataframe.loc[lambo1, 'buy_tag'] += 'lambo1_'
         conditions.append(lambo1)
