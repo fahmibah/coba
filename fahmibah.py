@@ -190,8 +190,8 @@ class fahmibah(IStrategy):
 
         # lambo1
         dataframe['ema_14'] = ta.EMA(dataframe['ha_close'], timeperiod=14)
-        dataframe['rsi_4'] = ta.RSI(dataframe, timeperiod=4)
-        dataframe['rsi_14'] = ta.RSI(dataframe, timeperiod=14)
+        dataframe['rsi_4'] = ta.RSI(dataframe['ha_close'], timeperiod=4)
+        dataframe['rsi_14'] = ta.RSI(dataframe['ha_close'], timeperiod=14)
 
         inf_tf = '1h'
 
@@ -213,8 +213,8 @@ class fahmibah(IStrategy):
         lambo1 = (
             bool(self.lambo1_enabled.value) &
             (dataframe['ha_close'] < (dataframe['ema_14'] * self.lambo1_ema_14_factor.value)) &
-            (dataframe['rsi_4'] < int(self.lambo1_rsi_4_limit.value)) &
-            (dataframe['rsi_14'] < int(self.lambo1_rsi_14_limit.value))
+            (dataframe['rsi_4'] < self.lambo1_rsi_4_limit.value) &
+            (dataframe['rsi_14'] < self.lambo1_rsi_14_limit.value)
         )
         dataframe.loc[lambo1, 'buy_tag'] += 'lambo1_'
         conditions.append(lambo1)
@@ -246,11 +246,7 @@ class fahmibah(IStrategy):
         return dataframe
 
     def populate_sell_trend(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
-
-        dataframe.loc[
-        'sell'
-        ] = 0
-
+        dataframe.loc[(), 'sell'] = 1
         return dataframe
 
     def confirm_trade_exit(self, pair: str, trade: Trade, order_type: str, amount: float,
