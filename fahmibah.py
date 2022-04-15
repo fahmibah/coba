@@ -42,7 +42,7 @@ class fahmibah(IStrategy):
         "closedelta_close": 0.00916,
         "rocr_1h": 0.79492,
         "fahmi1_enabled": True,
-        "fahmi1_lower": 0.982,
+        "fahmi1_lower": 1.5,
     }
 
     # Sell hyperspace params:
@@ -113,8 +113,9 @@ class fahmibah(IStrategy):
     bbdelta_tail = DecimalParameter(0.7, 1.0, default=0.95089, space='buy', decimals=5, optimize=False)
     close_bblower = DecimalParameter(0.0005, 0.02, default=0.00799, space='buy', decimals=5, optimize=False)
 
-    # buy params lambo1
-    fahmi1_lower = DecimalParameter(0.0005, 0.02, default=0.00799, space='buy', decimals=5, optimize=True)
+    # buy params fahmi1
+    fahmi1_enabled = BooleanParameter(default=buy_params['fahmi1_enabled'], space='buy', optimize=False)
+    fahmi1_lower = DecimalParameter(0.5, 1.5, default=0.8, space='buy', decimals=2, optimize=True)
 
     # hard stoploss profit
     pHSL = DecimalParameter(-0.500, -0.040, default=-0.08, decimals=3, space='sell', load=True)
@@ -172,6 +173,12 @@ class fahmibah(IStrategy):
         dataframe['lower'] = lower
         dataframe['mid'] = mid
 
+        # BB 20 - STD2
+        bb_20_std2 = qtpylib.bollinger_bands(qtpylib.typical_price(dataframe), window=20, stds=2)
+        dataframe['bb20_2_low'] = bb_20_std2['lower']
+        dataframe['bb20_2_mid'] = bb_20_std2['mid']
+        dataframe['bb20_2_upp'] = bb_20_std2['upper']
+
         # Clucha
 
         dataframe['bbdelta'] = (mid - dataframe['lower']).abs()
@@ -204,11 +211,11 @@ class fahmibah(IStrategy):
         dataframe.loc[:, 'buy_tag'] = ''
 
         fahmi1 = (
-            bool(self.lambo1_enabled.value) &
+            bool(self.fahmi1_enabled.value) &
             (dataframe['ha_close'] > dataframe['ema_200']) &
-            (dataframe['close'] < dataframe['bb_lowerband'] * self.fahmi1_lower.value)
+            (dataframe['ha_close'] < dataframe['bb20_2_low'] * self.fahmi1_lower.value)
         )
-        dataframe.loc[lambo1, 'buy_tag'] += 'fahmi1'
+        dataframe.loc[fahmi1, 'buy_tag'] += 'fahmi1'
         conditions.append(fahmi1)
 
         clucHA = (
