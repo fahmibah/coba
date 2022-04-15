@@ -41,10 +41,8 @@ class fahmibah(IStrategy):
         "close_bblower": 0.0127,
         "closedelta_close": 0.00916,
         "rocr_1h": 0.79492,
-        "lambo1_enabled": True,
-        "lambo1_ema_14_factor": 1.054,
-        "lambo1_rsi_4_limit": 18,
-        "lambo1_rsi_14_limit": 39,
+        "fahmi1_enabled": True,
+        "fahmi1_lower": 0.982,
     }
 
     # Sell hyperspace params:
@@ -116,10 +114,7 @@ class fahmibah(IStrategy):
     close_bblower = DecimalParameter(0.0005, 0.02, default=0.00799, space='buy', decimals=5, optimize=False)
 
     # buy params lambo1
-    lambo1_enabled = BooleanParameter(default=buy_params['lambo1_enabled'], space='buy', optimize=False)
-    lambo1_ema_14_factor = DecimalParameter(0.5, 2.0, default=1.054, space='buy', decimals=3, optimize=True)
-    lambo1_rsi_4_limit = IntParameter(0, 50, default=buy_params['lambo1_rsi_4_limit'], space='buy', optimize=True)
-    lambo1_rsi_14_limit = IntParameter(0, 50, default=buy_params['lambo1_rsi_14_limit'], space='buy', optimize=True)
+    fahmi1_lower = DecimalParameter(0.0005, 0.02, default=0.00799, space='buy', decimals=5, optimize=True)
 
     # hard stoploss profit
     pHSL = DecimalParameter(-0.500, -0.040, default=-0.08, decimals=3, space='sell', load=True)
@@ -188,10 +183,8 @@ class fahmibah(IStrategy):
         dataframe['ema_slow'] = ta.EMA(dataframe['ha_close'], timeperiod=50)
         dataframe['rocr'] = ta.ROCR(dataframe['ha_close'], timeperiod=28)
 
-        # lambo1
-        dataframe['ema_14'] = ta.EMA(dataframe['ha_close'], timeperiod=14)
-        dataframe['rsi_4'] = ta.RSI(dataframe['ha_close'], timeperiod=4)
-        dataframe['rsi_14'] = ta.RSI(dataframe['ha_close'], timeperiod=14)
+        # fahmi
+        dataframe['ema_200'] = ta.EMA(dataframe['ha_close'], timeperiod=200)
 
         inf_tf = '1h'
 
@@ -210,14 +203,13 @@ class fahmibah(IStrategy):
         conditions = []
         dataframe.loc[:, 'buy_tag'] = ''
 
-        lambo1 = (
+        fahmi1 = (
             bool(self.lambo1_enabled.value) &
-            (dataframe['ha_close'] < (dataframe['ema_14'] * self.lambo1_ema_14_factor.value)) &
-            (dataframe['rsi_4'] < self.lambo1_rsi_4_limit.value) &
-            (dataframe['rsi_14'] < self.lambo1_rsi_14_limit.value)
+            (dataframe['ha_close'] > dataframe['ema_200']) &
+            (dataframe['close'] < dataframe['bb_lowerband'] * self.fahmi1_lower.value)
         )
-        dataframe.loc[lambo1, 'buy_tag'] += 'lambo1_'
-        conditions.append(lambo1)
+        dataframe.loc[lambo1, 'buy_tag'] += 'fahmi1'
+        conditions.append(fahmi1)
 
         clucHA = (
             bool(self.clucha_enabled.value) &
@@ -246,13 +238,6 @@ class fahmibah(IStrategy):
         return dataframe
 
     def populate_sell_trend(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
-        dataframe.loc[(), 'sell'] = 1
+        dataframe.loc[(), 'sell'] = 0
         return dataframe
 
-    def confirm_trade_exit(self, pair: str, trade: Trade, order_type: str, amount: float,
-                           rate: float, time_in_force: str, sell_reason: str,
-                           current_time: datetime, **kwargs) -> bool:
-
-        trade.sell_reason = sell_reason + "_" + trade.buy_tag
-
-        return True
