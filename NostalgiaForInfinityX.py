@@ -187,8 +187,8 @@ class NostalgiaForInfinityX(IStrategy):
 
     # Optional order type mapping.
     order_types = {
-        'buy': 'market',
-        'sell': 'market',
+        'buy': 'limit',
+        'sell': 'limit',
         'trailing_stop_loss': 'limit',
         'stoploss': 'limit',
         'stoploss_on_exchange': False,
@@ -196,12 +196,10 @@ class NostalgiaForInfinityX(IStrategy):
         'stoploss_on_exchange_limit_ratio': 0.99
     }
 
-    rocr_168 = RealParameter(0.5, 1.0, default=0.54904, space='buy', optimize=True)
+    rocr_1h = RealParameter(0.5, 1.0, default=0.54904, space='buy', optimize=True)
     bbdelta_close = RealParameter(0.0005, 0.03, default=0.01965, space='buy', optimize=True)
     closedelta_close = RealParameter(0.0005, 0.03, default=0.00556, space='buy', optimize=True)
     bbdelta_tail = RealParameter(0.7, 1.2, default=0.95089, space='buy', optimize=True)
-    close_bblower = RealParameter(0.0005, 0.03, default=0.00799, space='buy', optimize=True)
-
 
     #############################################################
 
@@ -273,11 +271,10 @@ class NostalgiaForInfinityX(IStrategy):
         "buy_condition_63_enable": True,
         "buy_condition_64_enable": False,
         "buy_condition_65_enable": False,
-        "rocr_168": 0.79492,
         "bbdelta_close": 0.01889,
         "bbdelta_tail": 0.72235,
         "closedelta_close": 0.00916,
-        "close_bblower": 0.0127,
+        "rocr_1h": 0.79492,
         #############
     }
 
@@ -2555,7 +2552,7 @@ class NostalgiaForInfinityX(IStrategy):
             return True, 'sell_stoploss_doom_1'
 
         if (
-                (current_profit < [-0.14, -0.25, -0.25][stop_index])
+                (current_profit < [-0.14, -0.14, -0.14][stop_index])
                 and (last_candle['close'] < last_candle['ema_200'])
                 and (last_candle['bb20_width'] < 0.044)
                 and (last_candle['close'] > (last_candle['bb20_2_mid_1h'] * 0.954))
@@ -9241,13 +9238,9 @@ class NostalgiaForInfinityX(IStrategy):
         # EWO
         informative_1h['ewo'] = ewo(informative_1h, 50, 200)
 
-        #heikinashi
-        inf_heikinashi = qtpylib.heikinashi(informative_1h)
-        informative_1h['ha_close'] = heikinashi['close']
-
         # ROC
         informative_1h['roc_9'] = ta.ROC(informative_1h, timeperiod=9)
-        informative_1h['roc_168'] = ta.ROCR(informative_1h['ha_close'], timeperiod=168)
+        informative_1h['roc_168'] = ta.ROC(informative_1h, timeperiod=168)
 
         # T3 Average
         informative_1h['t3_avg'] = t3_average(informative_1h)
@@ -9453,8 +9446,6 @@ class NostalgiaForInfinityX(IStrategy):
         dataframe['ha_close'] = heikinashi['close']
         dataframe['ha_high'] = heikinashi['high']
         dataframe['ha_low'] = heikinashi['low']
-        dataframe['ema_fahmi'] = ta.EMA(dataframe['ha_close'], timeperiod=50)
-        dataframe['rocr'] = ta.ROCR(dataframe['ha_close'], timeperiod=28)
 
         dataframe['ha_closedelta'] = (dataframe['ha_close'] - dataframe['ha_close'].shift()).abs()
         dataframe['ha_tail'] = (dataframe['ha_close'] - dataframe['ha_low']).abs()
@@ -10543,6 +10534,8 @@ class NostalgiaForInfinityX(IStrategy):
                 # Condition #63 - Semi swing. Local dip. ClucHA.
                 elif index == 63:
                     # Non-Standard protections
+                    # item_buy_logic.append(dataframe['close'] > (dataframe['sup_level_1h'] * 0.9))
+                    # item_buy_logic.append(dataframe['close'] > (dataframe['ema_200_1h'] * 0.7))
 
                     # Logic
                     item_buy_logic.append(dataframe['bb40_2_delta'] > dataframe['ha_close'] * self.bbdelta_close.value)
@@ -10550,10 +10543,7 @@ class NostalgiaForInfinityX(IStrategy):
                     item_buy_logic.append(dataframe['ha_tail'] < dataframe['bb40_2_delta'] * self.bbdelta_tail.value)
                     item_buy_logic.append(dataframe['ha_close'] < dataframe['bb40_2_low'].shift())
                     item_buy_logic.append(dataframe['ha_close'] < dataframe['ha_close'].shift())
-                    item_buy_logic.append(dataframe['roc_168_1h'] > self.rocr_168.value)
-                    |
-                    item_buy_logic.append(dataframe['ha_close'] < dataframe['ema_fahmi'])
-                    item_buy_logic.append(dataframe['ha_close'] < dataframe['bb40_2_low'] * self.close_bblower.value)
+                    item_buy_logic.append(dataframe['roc_168_1h'] > self.rocr_1h.value)
 
                 # Condition #64 - Semi swing. Squeeze momentum.
                 elif index == 64:
