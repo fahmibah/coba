@@ -90,7 +90,7 @@ class fahmibah(IStrategy):
     use_custom_stoploss = True
 
     process_only_new_candles = True
-    startup_candle_count = 168
+    startup_candle_count = 200
 
     order_types = {
         'buy': 'limit',
@@ -115,7 +115,7 @@ class fahmibah(IStrategy):
 
     # buy params fahmi1
     fahmi1_enabled = BooleanParameter(default=buy_params['fahmi1_enabled'], space='buy', optimize=False)
-    fahmi1_lower = DecimalParameter(0.5, 1.5, default=0.8, space='buy', decimals=2, optimize=True)
+    fahmi1_lower = DecimalParameter(0.1, 1.5, default=0.8, space='buy', decimals=2, optimize=True)
 
     # hard stoploss profit
     pHSL = DecimalParameter(-0.500, -0.040, default=-0.08, decimals=3, space='sell', load=True)
@@ -124,8 +124,8 @@ class fahmibah(IStrategy):
     pSL_1 = DecimalParameter(0.008, 0.020, default=0.011, decimals=3, space='sell', load=True)
 
     # profit threshold 2, SL_2 is used
-    pPF_2 = DecimalParameter(0.040, 0.100, default=0.080, decimals=3, space='sell', load=True)
-    pSL_2 = DecimalParameter(0.020, 0.070, default=0.040, decimals=3, space='sell', load=True)
+    pPF_2 = DecimalParameter(0.03, 0.100, default=0.080, decimals=3, space='sell', load=True)
+    pSL_2 = DecimalParameter(0.02, 0.070, default=0.040, decimals=3, space='sell', load=True)
 
     def informative_pairs(self):
         pairs = self.dp.current_whitelist()
@@ -174,7 +174,7 @@ class fahmibah(IStrategy):
         dataframe['mid'] = mid
 
         # BB 20 - STD2
-        bb_20_std2 = qtpylib.bollinger_bands(qtpylib.typical_price(dataframe), window=20, stds=2)
+        bb_20_std2 = bollinger_bands(ha_typical_price(dataframe), window_size=20, num_of_std=2)
         dataframe['bb20_2_low'] = bb_20_std2['lower']
         dataframe['bb20_2_mid'] = bb_20_std2['mid']
         dataframe['bb20_2_upp'] = bb_20_std2['upper']
@@ -200,6 +200,7 @@ class fahmibah(IStrategy):
         inf_heikinashi = qtpylib.heikinashi(informative)
 
         informative['ha_close'] = inf_heikinashi['close']
+        informative['ema_200'] = ta.EMA(informative['ha_close'], timeperiod=200)
         informative['rocr'] = ta.ROCR(informative['ha_close'], timeperiod=168)
 
         dataframe = merge_informative_pair(dataframe, informative, self.timeframe, inf_tf, ffill=True)
@@ -213,10 +214,19 @@ class fahmibah(IStrategy):
         fahmi1 = (
             bool(self.fahmi1_enabled.value) &
             (dataframe['ha_close'] > dataframe['ema_200']) &
-            (dataframe['ha_close'] < dataframe['bb20_2_low'] * self.fahmi1_lower.value)
+            (dataframe['ha_close'] < dataframe['bb20_2_low'] * self.fahmi1_lower.value) &
+            (dataframe['ha_open'] - dataframe['ha_close'] < dataframe['bb20_2_upp'].shift(2) - dataframe['bb20_2_low'].shift(2))
         )
         dataframe.loc[fahmi1, 'buy_tag'] += 'fahmi1'
         conditions.append(fahmi1)
+
+        fahmi2 = (
+            bool(self.fahmi1_enabled.value) &
+            (dataframe['ha_close'] > dataframe['ema_200']) &
+            (dataframe['ha_close'] < dataframe['bb20_2_low'] * self.fahmi1_lower.value)
+        )
+        dataframe.loc[fahmi2, 'buy_tag'] += 'fahmi2'
+        conditions.append(fahmi2)
 
         clucHA = (
             bool(self.clucha_enabled.value) &
