@@ -35,23 +35,26 @@ class ClucHAnix_5m(IStrategy):
         "bbdelta_tail": 0.72235,
         "close_bblower": 0.0127,
         "closedelta_close": 0.00916,
+        "rocr_1h": 0.79492,
     }
 
     # Sell hyperspace params:
     sell_params = {
         # custom stoploss params, come from BB_RPB_TSL
-        "pHSL": -0.10,
-        "pPF_1": 0.025,
-        "pPF_2": 0.035,
+        "pHSL": -0.99,
+        "pPF_1": 0.02,
+        "pPF_2": 0.05,
         "pSL_1": 0.02,
-        "pSL_2": 0.03,
+        "pSL_2": 0.04,
+
+        # sell signal params
+        'sell_fisher': 0.39075,
+        'sell_bbmiddle_close': 0.99754
     }
 
     # ROI table:
     minimal_roi = {
-        "0": 0.038,
-        "10": 0.028,
-        "40": 0.015,
+        "0": 100
     }
 
     # Stoploss:
@@ -94,10 +97,15 @@ class ClucHAnix_5m(IStrategy):
     }
 
     # buy params
+    rocr_1h = RealParameter(0.5, 1.0, default=0.54904, space='buy', optimize=True)
     bbdelta_close = RealParameter(0.0005, 0.02, default=0.01965, space='buy', optimize=True)
     closedelta_close = RealParameter(0.0005, 0.02, default=0.00556, space='buy', optimize=True)
     bbdelta_tail = RealParameter(0.7, 1.0, default=0.95089, space='buy', optimize=True)
     close_bblower = RealParameter(0.0005, 0.02, default=0.00799, space='buy', optimize=True)
+
+    # sell params
+    sell_fisher = RealParameter(0.1, 0.5, default=0.38414, space='sell', optimize=True)
+    sell_bbmiddle_close = RealParameter(0.97, 1.1, default=1.07634, space='sell', optimize=True)
 
     # hard stoploss profit
     pHSL = DecimalParameter(-0.500, -0.040, default=-0.08, decimals=3, space='sell', load=True)
@@ -106,9 +114,13 @@ class ClucHAnix_5m(IStrategy):
     pSL_1 = DecimalParameter(0.008, 0.020, default=0.011, decimals=3, space='sell', load=True)
 
     # profit threshold 2, SL_2 is used
-    pPF_2 = DecimalParameter(0.010, 0.100, default=0.080, decimals=3, space='sell', load=True)
-    pSL_2 = DecimalParameter(0.010, 0.070, default=0.040, decimals=3, space='sell', load=True)
+    pPF_2 = DecimalParameter(0.040, 0.100, default=0.080, decimals=3, space='sell', load=True)
+    pSL_2 = DecimalParameter(0.020, 0.070, default=0.040, decimals=3, space='sell', load=True)
 
+    def informative_pairs(self):
+        pairs = self.dp.current_whitelist()
+        informative_pairs = [(pair, '1h') for pair in pairs]
+        return informative_pairs
 
     # come from BB_RPB_TSL
     def custom_stoploss(self, pair: str, trade: 'Trade', current_time: datetime,
@@ -158,7 +170,26 @@ class ClucHAnix_5m(IStrategy):
         dataframe['bb_lowerband'] = dataframe['lower']
         dataframe['bb_middleband'] = dataframe['mid']
 
+        dataframe['ema_fast'] = ta.EMA(dataframe['ha_close'], timeperiod=3)
         dataframe['ema_slow'] = ta.EMA(dataframe['ha_close'], timeperiod=50)
+        dataframe['volume_mean_slow'] = dataframe['volume'].rolling(window=30).mean()
+        dataframe['rocr'] = ta.ROCR(dataframe['ha_close'], timeperiod=28)
+
+        rsi = ta.RSI(dataframe)
+        dataframe["rsi"] = rsi
+        rsi = 0.1 * (rsi - 50)
+        dataframe["fisher"] = (np.exp(2 * rsi) - 1) / (np.exp(2 * rsi) + 1)
+
+        inf_tf = '1h'
+
+        informative = self.dp.get_pair_dataframe(pair=metadata['pair'], timeframe=inf_tf)
+
+        inf_heikinashi = qtpylib.heikinashi(informative)
+
+        informative['ha_close'] = inf_heikinashi['close']
+        informative['rocr'] = ta.ROCR(informative['ha_close'], timeperiod=168)
+
+        dataframe = merge_informative_pair(dataframe, informative, self.timeframe, inf_tf, ffill=True)
 
         return dataframe
 
@@ -167,7 +198,11 @@ class ClucHAnix_5m(IStrategy):
         dataframe.loc[:, 'buy_tag'] = 'ClucHA'
 
         dataframe.loc[
-                     (((dataframe['lower'].shift().gt(0)) &
+            (
+                dataframe['rocr_1h'].gt(self.rocr_1h.value)
+            ) &
+            ((
+                     (dataframe['lower'].shift().gt(0)) &
                      (dataframe['bbdelta'].gt(dataframe['ha_close'] * self.bbdelta_close.value)) &
                      (dataframe['closedelta'].gt(dataframe['ha_close'] * self.closedelta_close.value)) &
                      (dataframe['tail'].lt(dataframe['bbdelta'] * self.bbdelta_tail.value)) &
@@ -186,6 +221,7 @@ class ClucHAnix_5m(IStrategy):
     def populate_sell_trend(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
 
         dataframe.loc[
+            (dataframe['volume'] > 0),
             'sell'
         ] = 0
 
