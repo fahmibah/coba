@@ -3891,14 +3891,14 @@ class NostalgiaForInfinityNext(IStrategy):
         max_loss = ((trade.open_rate - trade.min_rate) / trade.min_rate)
 
         if hasattr(trade, 'select_filled_orders'):
-            count_of_entries = 1
+            count_of_buys = 1
             if (hasattr(trade, 'enter_side')):
                 filled_entries = trade.select_filled_orders(trade.enter_side)
-                count_of_entries = trade.nr_of_successful_entries
+                count_of_buys = trade.nr_of_successful_entries
             else:
                 filled_entries = trade.select_filled_orders('buy')
-                count_of_entries = len(filled_entries)
-            if count_of_entries > 1:
+                count_of_buys = len(filled_entries)
+            if count_of_buys > 1:
                 initial_entry = filled_entries[0]
                 if (initial_entry is not None and initial_entry.average is not None):
                     max_profit = ((trade.max_rate - initial_entry.average) / initial_entry.average)
