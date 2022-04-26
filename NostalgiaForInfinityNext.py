@@ -2080,7 +2080,7 @@ class NostalgiaForInfinityNext(IStrategy):
         :return float: Stake amount to adjust your trade
         """
 
-        if (self.config['position_adjustment_enable'] == False) or (current_profit > -0.06):
+        if (self.config['position_adjustment_enable'] == False) or (current_profit > -0.04):
             return None
 
         dataframe, _ = self.dp.get_analyzed_dataframe(trade.pair, self.timeframe)
@@ -2093,20 +2093,17 @@ class NostalgiaForInfinityNext(IStrategy):
 
         if (count_of_buys == 1):
             if (
-                    (current_profit > -0.06)
-                    or (
-                        (last_candle['crsi'] < 12.0)
-                        or (last_candle['crsi_1h'] < 11.0)
+                    (current_profit < -0.04)
+                    and (
+                        (last_candle['crsi'] < 10.0)
                     )
             ):
                 return None
         elif (count_of_buys == 2):
             if (
-                    (current_profit > -0.08)
-                    or (
+                    (current_profit < -0.08)
+                    and (
                         (last_candle['crsi'] < 20.0)
-                        or (last_candle['crsi_1h'] < 11.0)
-                        or (last_candle['close'] < previous_candle['close'])
                     )
             ):
                 return None
@@ -2973,6 +2970,18 @@ class NostalgiaForInfinityNext(IStrategy):
 
         return False, None
 
+    def sell_stoploss_doom(self, current_profit: float, last_candle, previous_candle_1, trade: 'Trade', current_time: 'datetime') -> tuple:
+        if (
+                (current_profit < -0.1)
+                and (last_candle['close'] < last_candle['ema_200'])
+                and (last_candle['close'] < (last_candle['ema_200'] - last_candle['atr']))
+                and (last_candle['sma_200_dec_20'])
+                and (last_candle['cmf'] < -0.0)
+        ):
+            return True, 'sell_stoploss_doom_1'
+
+        return False, None
+
     def sell_pump_dec(self, current_profit: float, last_candle) -> tuple:
         if (0.03 > current_profit >= 0.005) and (last_candle['sell_pump_48_1_1h']) and (last_candle['sma_200_dec_20']) and (last_candle['close'] < last_candle['ema_200']):
             return True, 'signal_profit_p_d_1'
@@ -3402,6 +3411,11 @@ class NostalgiaForInfinityNext(IStrategy):
 
         # Stoplosses
         sell, signal_name = self.sell_stoploss(current_profit, last_candle, previous_candle_1, trade, current_time)
+        if sell and (signal_name is not None):
+            return f"{signal_name} ( {buy_tag} )"
+
+        # Stoplosses_doom
+        sell, signal_name = self.sell_stoploss_doom(current_profit, last_candle, previous_candle_1, trade, current_time)
         if sell and (signal_name is not None):
             return f"{signal_name} ( {buy_tag} )"
 
