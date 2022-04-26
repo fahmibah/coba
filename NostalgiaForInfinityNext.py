@@ -15,10 +15,11 @@ from typing import Dict
 from freqtrade.persistence import Trade
 from datetime import datetime, timedelta
 from technical.util import resample_to_interval, resampled_merge
-from technical.indicators import RMI,zema, VIDYA, ichimoku
+from technical.indicators import zema, VIDYA, ichimoku
 import time
 
 log = logging.getLogger(__name__)
+#log.setLevel(logging.DEBUG)
 
 
 try:
@@ -122,7 +123,8 @@ class NostalgiaForInfinityNext(IStrategy):
     # Optimal timeframe for the strategy.
     timeframe = '5m'
     res_timeframe = 'none'
-    info_timeframe = '1h'
+    info_timeframe_1h = '1h'
+    info_timeframe_1d = '1d'
 
     # BTC informative
     has_BTC_base_tf = False
@@ -141,11 +143,20 @@ class NostalgiaForInfinityNext(IStrategy):
     max_rebuy_orders = 2
     max_rebuy_multiplier = 3.0
 
-    # Report populate_indicators loop time per pair
-    has_loop_perf_logging = False
-
     # Do you want to use the hold feature? (with hold-trades.json)
-    holdSupportEnabled = True
+    holdSupportEnabled = False
+
+    # Coin Metrics
+    coin_metrics = {}
+    coin_metrics['top_traded_enabled'] = False
+    coin_metrics['top_traded_updated'] = False
+    coin_metrics['top_traded_len'] = 10
+    coin_metrics['tt_dataframe'] = DataFrame()
+    coin_metrics['top_grossing_enabled'] = False
+    coin_metrics['top_grossing_updated'] = False
+    coin_metrics['top_grossing_len'] = 20
+    coin_metrics['tg_dataframe'] = DataFrame()
+    coin_metrics['current_whitelist'] = []
 
     # Run "populate_indicators()" only for new candle.
     process_only_new_candles = True
@@ -164,7 +175,9 @@ class NostalgiaForInfinityNext(IStrategy):
         'sell': 'limit',
         'trailing_stop_loss': 'limit',
         'stoploss': 'limit',
-        'stoploss_on_exchange': False
+        'stoploss_on_exchange': False,
+        'stoploss_on_exchange_interval': 60,
+        'stoploss_on_exchange_limit_ratio': 0.99
     }
 
     #############################################################
@@ -256,23 +269,29 @@ class NostalgiaForInfinityNext(IStrategy):
             "close_above_ema_fast_len"  : "200",
             "close_above_ema_slow"      : False,
             "close_above_ema_slow_len"  : "200",
-            "sma200_rising"             : True,
+            "sma200_rising"             : False,
             "sma200_rising_val"         : "28",
             "sma200_1h_rising"          : False,
             "sma200_1h_rising_val"      : "50",
-            "safe_dips"                 : True,
-            "safe_dips_type"            : "130",
+            "safe_dips_threshold_0"     : 0.028,
+            "safe_dips_threshold_2"     : 0.3,
+            "safe_dips_threshold_12"    : 0.48,
+            "safe_dips_threshold_144"   : 0.9,
             "safe_pump"                 : False,
             "safe_pump_type"            : "70",
             "safe_pump_period"          : "24",
-            "btc_1h_not_downtrend"      : False
+            "btc_1h_not_downtrend"      : False,
+            "close_over_pivot_type"     : "none", # pivot, sup1, sup2, sup3, res1, res2, res3
+            "close_over_pivot_offset"   : 1.0,
+            "close_under_pivot_type"    : "none", # pivot, sup1, sup2, sup3, res1, res2, res3
+            "close_under_pivot_offset"  : 1.0
         },
         2: {
-            "ema_fast"                  : False,
+            "ema_fast"                  : True,
             "ema_fast_len"              : "50",
             "ema_slow"                  : True,
             "ema_slow_len"              : "20",
-            "close_above_ema_fast"      : True,
+            "close_above_ema_fast"      : False,
             "close_above_ema_fast_len"  : "200",
             "close_above_ema_slow"      : False,
             "close_above_ema_slow_len"  : "200",
@@ -280,38 +299,50 @@ class NostalgiaForInfinityNext(IStrategy):
             "sma200_rising_val"         : "50",
             "sma200_1h_rising"          : True,
             "sma200_1h_rising_val"      : "48",
-            "safe_dips"                 : True,
-            "safe_dips_type"            : "130",
-            "safe_pump"                 : True,
-            "safe_pump_type"            : "80",
+            "safe_dips_threshold_0"     : 0.028,
+            "safe_dips_threshold_2"     : 0.3,
+            "safe_dips_threshold_12"    : 0.48,
+            "safe_dips_threshold_144"   : 0.9,
+            "safe_pump"                 : False,
+            "safe_pump_type"            : "20",
             "safe_pump_period"          : "24",
-            "btc_1h_not_downtrend"      : False
+            "btc_1h_not_downtrend"      : False,
+            "close_over_pivot_type"     : "none", # pivot, sup1, sup2, sup3, res1, res2, res3
+            "close_over_pivot_offset"   : 1.0,
+            "close_under_pivot_type"    : "res3", # pivot, sup1, sup2, sup3, res1, res2, res3
+            "close_under_pivot_offset"  : 1.4
         },
         3: {
-            "ema_fast"                  : True,
+            "ema_fast"                  : False,
             "ema_fast_len"              : "100",
-            "ema_slow"                  : True,
+            "ema_slow"                  : False,
             "ema_slow_len"              : "100",
             "close_above_ema_fast"      : False,
             "close_above_ema_fast_len"  : "200",
             "close_above_ema_slow"      : False,
             "close_above_ema_slow_len"  : "200",
             "sma200_rising"             : False,
-            "sma200_rising_val"         : "50",
+            "sma200_rising_val"         : "30",
             "sma200_1h_rising"          : False,
-            "sma200_1h_rising_val"      : "50",
-            "safe_dips"                 : True,
-            "safe_dips_type"            : "70",
+            "sma200_1h_rising_val"      : "36",
+            "safe_dips_threshold_0"     : None,
+            "safe_dips_threshold_2"     : None,
+            "safe_dips_threshold_12"    : None,
+            "safe_dips_threshold_144"   : None,
             "safe_pump"                 : True,
-            "safe_pump_type"            : "100",
+            "safe_pump_type"            : "110",
             "safe_pump_period"          : "36",
-            "btc_1h_not_downtrend"      : False
+            "btc_1h_not_downtrend"      : False,
+            "close_over_pivot_type"     : "none", # pivot, sup1, sup2, sup3, res1, res2, res3
+            "close_over_pivot_offset"   : 1.0,
+            "close_under_pivot_type"    : "none", # pivot, sup1, sup2, sup3, res1, res2, res3
+            "close_under_pivot_offset"  : 1.0
         },
         4: {
             "ema_fast"                  : True,
             "ema_fast_len"              : "50",
             "ema_slow"                  : True,
-            "ema_slow_len"              : "50",
+            "ema_slow_len"              : "12",
             "close_above_ema_fast"      : False,
             "close_above_ema_fast_len"  : "200",
             "close_above_ema_slow"      : False,
@@ -320,12 +351,18 @@ class NostalgiaForInfinityNext(IStrategy):
             "sma200_rising_val"         : "50",
             "sma200_1h_rising"          : False,
             "sma200_1h_rising_val"      : "20",
-            "safe_dips"                 : True,
-            "safe_dips_type"            : "50",
+            "safe_dips_threshold_0"     : 0.028,
+            "safe_dips_threshold_2"     : 0.3,
+            "safe_dips_threshold_12"    : 0.48,
+            "safe_dips_threshold_144"   : 0.9,
             "safe_pump"                 : False,
             "safe_pump_type"            : "110",
             "safe_pump_period"          : "48",
-            "btc_1h_not_downtrend"      : False
+            "btc_1h_not_downtrend"      : False,
+            "close_over_pivot_type"     : "none", # pivot, sup1, sup2, sup3, res1, res2, res3
+            "close_over_pivot_offset"   : 1.0,
+            "close_under_pivot_type"    : "none", # pivot, sup1, sup2, sup3, res1, res2, res3
+            "close_under_pivot_offset"  : 1.0
         },
         5: {
             "ema_fast"                  : False,
@@ -340,12 +377,18 @@ class NostalgiaForInfinityNext(IStrategy):
             "sma200_rising_val"         : "50",
             "sma200_1h_rising"          : False,
             "sma200_1h_rising_val"      : "50",
-            "safe_dips"                 : True,
-            "safe_dips_type"            : "70",
+            "safe_dips_threshold_0"     : 0.028,
+            "safe_dips_threshold_2"     : 0.3,
+            "safe_dips_threshold_12"    : 0.48,
+            "safe_dips_threshold_144"   : 0.9,
             "safe_pump"                 : True,
-            "safe_pump_type"            : "80",
+            "safe_pump_type"            : "120",
             "safe_pump_period"          : "36",
-            "btc_1h_not_downtrend"      : False
+            "btc_1h_not_downtrend"      : False,
+            "close_over_pivot_type"     : "none", # pivot, sup1, sup2, sup3, res1, res2, res3
+            "close_over_pivot_offset"   : 1.0,
+            "close_under_pivot_type"    : "none", # pivot, sup1, sup2, sup3, res1, res2, res3
+            "close_under_pivot_offset"  : 1.0
         },
         6: {
             "ema_fast"                  : False,
@@ -360,12 +403,18 @@ class NostalgiaForInfinityNext(IStrategy):
             "sma200_rising_val"         : "50",
             "sma200_1h_rising"          : False,
             "sma200_1h_rising_val"      : "50",
-            "safe_dips"                 : True,
-            "safe_dips_type"            : "90",
+            "safe_dips_threshold_0"     : 0.028,
+            "safe_dips_threshold_2"     : 0.3,
+            "safe_dips_threshold_12"    : 0.48,
+            "safe_dips_threshold_144"   : 0.9,
             "safe_pump"                 : True,
-            "safe_pump_type"            : "20",
+            "safe_pump_type"            : "120",
             "safe_pump_period"          : "36",
-            "btc_1h_not_downtrend"      : False
+            "btc_1h_not_downtrend"      : False,
+            "close_over_pivot_type"     : "none", # pivot, sup1, sup2, sup3, res1, res2, res3
+            "close_over_pivot_offset"   : 1.0,
+            "close_under_pivot_type"    : "none", # pivot, sup1, sup2, sup3, res1, res2, res3
+            "close_under_pivot_offset"  : 1.0
         },
         7: {
             "ema_fast"                  : True,
@@ -380,15 +429,21 @@ class NostalgiaForInfinityNext(IStrategy):
             "sma200_rising_val"         : "50",
             "sma200_1h_rising"          : False,
             "sma200_1h_rising_val"      : "50",
-            "safe_dips"                 : True,
-            "safe_dips_type"            : "130",
+            "safe_dips_threshold_0"     : 0.028,
+            "safe_dips_threshold_2"     : 0.3,
+            "safe_dips_threshold_12"    : 0.48,
+            "safe_dips_threshold_144"   : 0.9,
             "safe_pump"                 : True,
-            "safe_pump_type"            : "120",
+            "safe_pump_type"            : "80",
             "safe_pump_period"          : "24",
-            "btc_1h_not_downtrend"      : False
+            "btc_1h_not_downtrend"      : False,
+            "close_over_pivot_type"     : "none", # pivot, sup1, sup2, sup3, res1, res2, res3
+            "close_over_pivot_offset"   : 1.0,
+            "close_under_pivot_type"    : "none", # pivot, sup1, sup2, sup3, res1, res2, res3
+            "close_under_pivot_offset"  : 1.0
         },
         8: {
-            "ema_fast"                  : False,
+            "ema_fast"                  : True,
             "ema_fast_len"              : "12",
             "ema_slow"                  : True,
             "ema_slow_len"              : "12",
@@ -400,12 +455,18 @@ class NostalgiaForInfinityNext(IStrategy):
             "sma200_rising_val"         : "36",
             "sma200_1h_rising"          : True,
             "sma200_1h_rising_val"      : "20",
-            "safe_dips"                 : True,
-            "safe_dips_type"            : "130",
+            "safe_dips_threshold_0"     : 0.016,
+            "safe_dips_threshold_2"     : 0.11,
+            "safe_dips_threshold_12"    : 0.26,
+            "safe_dips_threshold_144"   : 0.44,
             "safe_pump"                 : True,
             "safe_pump_type"            : "120",
             "safe_pump_period"          : "24",
-            "btc_1h_not_downtrend"      : False
+            "btc_1h_not_downtrend"      : False,
+            "close_over_pivot_type"     : "none", # pivot, sup1, sup2, sup3, res1, res2, res3
+            "close_over_pivot_offset"   : 1.0,
+            "close_under_pivot_type"    : "res3", # pivot, sup1, sup2, sup3, res1, res2, res3
+            "close_under_pivot_offset"  : 1.05
         },
         9: {
             "ema_fast"                  : True,
@@ -420,16 +481,22 @@ class NostalgiaForInfinityNext(IStrategy):
             "sma200_rising_val"         : "50",
             "sma200_1h_rising"          : False,
             "sma200_1h_rising_val"      : "50",
-            "safe_dips"                 : False,
-            "safe_dips_type"            : "130",
+            "safe_dips_threshold_0"     : None,
+            "safe_dips_threshold_2"     : None,
+            "safe_dips_threshold_12"    : None,
+            "safe_dips_threshold_144"   : None,
             "safe_pump"                 : False,
             "safe_pump_type"            : "100",
             "safe_pump_period"          : "24",
-            "btc_1h_not_downtrend"      : False
+            "btc_1h_not_downtrend"      : False,
+            "close_over_pivot_type"     : "none", # pivot, sup1, sup2, sup3, res1, res2, res3
+            "close_over_pivot_offset"   : 1.0,
+            "close_under_pivot_type"    : "res3", # pivot, sup1, sup2, sup3, res1, res2, res3
+            "close_under_pivot_offset"  : 1.1
         },
         10: {
-            "ema_fast"                  : False,
-            "ema_fast_len"              : "50",
+            "ema_fast"                  : True,
+            "ema_fast_len"              : "35",
             "ema_slow"                  : True,
             "ema_slow_len"              : "12",
             "close_above_ema_fast"      : False,
@@ -440,32 +507,44 @@ class NostalgiaForInfinityNext(IStrategy):
             "sma200_rising_val"         : "50",
             "sma200_1h_rising"          : False,
             "sma200_1h_rising_val"      : "24",
-            "safe_dips"                 : True,
-            "safe_dips_type"            : "120",
-            "safe_pump"                 : False,
-            "safe_pump_type"            : "50",
+            "safe_dips_threshold_0"     : 0.016,
+            "safe_dips_threshold_2"     : 0.11,
+            "safe_dips_threshold_12"    : 0.26,
+            "safe_dips_threshold_144"   : 0.44,
+            "safe_pump"                 : True,
+            "safe_pump_type"            : "120",
             "safe_pump_period"          : "24",
-            "btc_1h_not_downtrend"      : False
+            "btc_1h_not_downtrend"      : False,
+            "close_over_pivot_type"     : "none", # pivot, sup1, sup2, sup3, res1, res2, res3
+            "close_over_pivot_offset"   : 1.0,
+            "close_under_pivot_type"    : "res3", # pivot, sup1, sup2, sup3, res1, res2, res3
+            "close_under_pivot_offset"  : 1.6
         },
         11: {
             "ema_fast"                  : False,
             "ema_fast_len"              : "50",
-            "ema_slow"                  : False,
-            "ema_slow_len"              : "50",
+            "ema_slow"                  : True,
+            "ema_slow_len"              : "20",
             "close_above_ema_fast"      : False,
             "close_above_ema_fast_len"  : "200",
             "close_above_ema_slow"      : False,
             "close_above_ema_slow_len"  : "200",
             "sma200_rising"             : False,
-            "sma200_rising_val"         : "50",
-            "sma200_1h_rising"          : False,
-            "sma200_1h_rising_val"      : "50",
-            "safe_dips"                 : False,
-            "safe_dips_type"            : "100",
+            "sma200_rising_val"         : "24",
+            "sma200_1h_rising"          : True,
+            "sma200_1h_rising_val"      : "36",
+            "safe_dips_threshold_0"     : 0.022,
+            "safe_dips_threshold_2"     : 0.18,
+            "safe_dips_threshold_12"    : 0.34,
+            "safe_dips_threshold_144"   : 0.56,
             "safe_pump"                 : False,
-            "safe_pump_type"            : "50",
-            "safe_pump_period"          : "24",
-            "btc_1h_not_downtrend"      : False
+            "safe_pump_type"            : "120",
+            "safe_pump_period"          : "36",
+            "btc_1h_not_downtrend"      : False,
+            "close_over_pivot_type"     : "none", # pivot, sup1, sup2, sup3, res1, res2, res3
+            "close_over_pivot_offset"   : 1.0,
+            "close_under_pivot_type"    : "none", # pivot, sup1, sup2, sup3, res1, res2, res3
+            "close_under_pivot_offset"  : 1.0
         },
         12: {
             "ema_fast"                  : False,
@@ -480,12 +559,18 @@ class NostalgiaForInfinityNext(IStrategy):
             "sma200_rising_val"         : "50",
             "sma200_1h_rising"          : True,
             "sma200_1h_rising_val"      : "24",
-            "safe_dips"                 : True,
-            "safe_dips_type"            : "130",
+            "safe_dips_threshold_0"     : 0.028,
+            "safe_dips_threshold_2"     : 0.3,
+            "safe_dips_threshold_12"    : 0.48,
+            "safe_dips_threshold_144"   : 0.9,
             "safe_pump"                 : True,
-            "safe_pump_type"            : "40",
+            "safe_pump_type"            : "120",
             "safe_pump_period"          : "24",
-            "btc_1h_not_downtrend"      : False
+            "btc_1h_not_downtrend"      : False,
+            "close_over_pivot_type"     : "none", # pivot, sup1, sup2, sup3, res1, res2, res3
+            "close_over_pivot_offset"   : 1.0,
+            "close_under_pivot_type"    : "res3", # pivot, sup1, sup2, sup3, res1, res2, res3
+            "close_under_pivot_offset"  : 1.3
         },
         13: {
             "ema_fast"                  : False,
@@ -500,12 +585,18 @@ class NostalgiaForInfinityNext(IStrategy):
             "sma200_rising_val"         : "50",
             "sma200_1h_rising"          : True,
             "sma200_1h_rising_val"      : "24",
-            "safe_dips"                 : True,
-            "safe_dips_type"            : "130",
+            "safe_dips_threshold_0"     : 0.028,
+            "safe_dips_threshold_2"     : 0.3,
+            "safe_dips_threshold_12"    : 0.48,
+            "safe_dips_threshold_144"   : 0.9,
             "safe_pump"                 : False,
             "safe_pump_type"            : "50",
             "safe_pump_period"          : "24",
-            "btc_1h_not_downtrend"      : False
+            "btc_1h_not_downtrend"      : False,
+            "close_over_pivot_type"     : "none", # pivot, sup1, sup2, sup3, res1, res2, res3
+            "close_over_pivot_offset"   : 1.0,
+            "close_under_pivot_type"    : "none", # pivot, sup1, sup2, sup3, res1, res2, res3
+            "close_under_pivot_offset"  : 1.0
         },
         14: {
             "ema_fast"                  : False,
@@ -520,12 +611,18 @@ class NostalgiaForInfinityNext(IStrategy):
             "sma200_rising_val"         : "30",
             "sma200_1h_rising"          : True,
             "sma200_1h_rising_val"      : "50",
-            "safe_dips"                 : True,
-            "safe_dips_type"            : "120",
+            "safe_dips_threshold_0"     : 0.028,
+            "safe_dips_threshold_2"     : 0.3,
+            "safe_dips_threshold_12"    : 0.48,
+            "safe_dips_threshold_144"   : 0.9,
             "safe_pump"                 : False,
             "safe_pump_type"            : "100",
             "safe_pump_period"          : "24",
-            "btc_1h_not_downtrend"      : False
+            "btc_1h_not_downtrend"      : False,
+            "close_over_pivot_type"     : "none", # pivot, sup1, sup2, sup3, res1, res2, res3
+            "close_over_pivot_offset"   : 1.0,
+            "close_under_pivot_type"    : "none", # pivot, sup1, sup2, sup3, res1, res2, res3
+            "close_under_pivot_offset"  : 1.5
         },
         15: {
             "ema_fast"                  : False,
@@ -540,12 +637,18 @@ class NostalgiaForInfinityNext(IStrategy):
             "sma200_rising_val"         : "50",
             "sma200_1h_rising"          : False,
             "sma200_1h_rising_val"      : "50",
-            "safe_dips"                 : True,
-            "safe_dips_type"            : "130",
+            "safe_dips_threshold_0"     : 0.028,
+            "safe_dips_threshold_2"     : 0.3,
+            "safe_dips_threshold_12"    : 0.48,
+            "safe_dips_threshold_144"   : 0.9,
             "safe_pump"                 : True,
-            "safe_pump_type"            : "120",
+            "safe_pump_type"            : "80",
             "safe_pump_period"          : "36",
-            "btc_1h_not_downtrend"      : False
+            "btc_1h_not_downtrend"      : False,
+            "close_over_pivot_type"     : "none", # pivot, sup1, sup2, sup3, res1, res2, res3
+            "close_over_pivot_offset"   : 1.0,
+            "close_under_pivot_type"    : "none", # pivot, sup1, sup2, sup3, res1, res2, res3
+            "close_under_pivot_offset"  : 1.0
         },
         16: {
             "ema_fast"                  : False,
@@ -560,12 +663,18 @@ class NostalgiaForInfinityNext(IStrategy):
             "sma200_rising_val"         : "50",
             "sma200_1h_rising"          : False,
             "sma200_1h_rising_val"      : "50",
-            "safe_dips"                 : True,
-            "safe_dips_type"            : "110",
+            "safe_dips_threshold_0"     : 0.027,
+            "safe_dips_threshold_2"     : 0.26,
+            "safe_dips_threshold_12"    : 0.44,
+            "safe_dips_threshold_144"   : 0.84,
             "safe_pump"                 : True,
             "safe_pump_type"            : "120",
             "safe_pump_period"          : "24",
-            "btc_1h_not_downtrend"      : False
+            "btc_1h_not_downtrend"      : False,
+            "close_over_pivot_type"     : "none", # pivot, sup1, sup2, sup3, res1, res2, res3
+            "close_over_pivot_offset"   : 1.0,
+            "close_under_pivot_type"    : "none", # pivot, sup1, sup2, sup3, res1, res2, res3
+            "close_under_pivot_offset"  : 1.0
         },
         17: {
             "ema_fast"                  : False,
@@ -580,12 +689,18 @@ class NostalgiaForInfinityNext(IStrategy):
             "sma200_rising_val"         : "50",
             "sma200_1h_rising"          : False,
             "sma200_1h_rising_val"      : "50",
-            "safe_dips"                 : True,
-            "safe_dips_type"            : "130",
+            "safe_dips_threshold_0"     : 0.028,
+            "safe_dips_threshold_2"     : 0.3,
+            "safe_dips_threshold_12"    : 0.48,
+            "safe_dips_threshold_144"   : 0.9,
             "safe_pump"                 : False,
             "safe_pump_type"            : "120",
             "safe_pump_period"          : "24",
-            "btc_1h_not_downtrend"      : False
+            "btc_1h_not_downtrend"      : False,
+            "close_over_pivot_type"     : "none", # pivot, sup1, sup2, sup3, res1, res2, res3
+            "close_over_pivot_offset"   : 1.0,
+            "close_under_pivot_type"    : "none", # pivot, sup1, sup2, sup3, res1, res2, res3
+            "close_under_pivot_offset"  : 1.0
         },
         18: {
             "ema_fast"                  : True,
@@ -600,12 +715,18 @@ class NostalgiaForInfinityNext(IStrategy):
             "sma200_rising_val"         : "44",
             "sma200_1h_rising"          : True,
             "sma200_1h_rising_val"      : "72",
-            "safe_dips"                 : True,
-            "safe_dips_type"            : "100",
+            "safe_dips_threshold_0"     : 0.026,
+            "safe_dips_threshold_2"     : 0.24,
+            "safe_dips_threshold_12"    : 0.42,
+            "safe_dips_threshold_144"   : 0.8,
             "safe_pump"                 : True,
             "safe_pump_type"            : "120",
             "safe_pump_period"          : "24",
-            "btc_1h_not_downtrend"      : False
+            "btc_1h_not_downtrend"      : False,
+            "close_over_pivot_type"     : "none", # pivot, sup1, sup2, sup3, res1, res2, res3
+            "close_over_pivot_offset"   : 1.0,
+            "close_under_pivot_type"    : "none", # pivot, sup1, sup2, sup3, res1, res2, res3
+            "close_under_pivot_offset"  : 1.0
         },
         19: {
             "ema_fast"                  : True,
@@ -619,13 +740,19 @@ class NostalgiaForInfinityNext(IStrategy):
             "sma200_rising"             : False,
             "sma200_rising_val"         : "36",
             "sma200_1h_rising"          : False,
-            "sma200_1h_rising_val"      : "50",
-            "safe_dips"                 : True,
-            "safe_dips_type"            : "130",
+            "sma200_1h_rising_val"      : "36",
+            "safe_dips_threshold_0"     : 0.028,
+            "safe_dips_threshold_2"     : 0.3,
+            "safe_dips_threshold_12"    : 0.48,
+            "safe_dips_threshold_144"   : 0.9,
             "safe_pump"                 : False,
             "safe_pump_type"            : "50",
             "safe_pump_period"          : "24",
-            "btc_1h_not_downtrend"      : False
+            "btc_1h_not_downtrend"      : True,
+            "close_over_pivot_type"     : "none", # pivot, sup1, sup2, sup3, res1, res2, res3
+            "close_over_pivot_offset"   : 1.0,
+            "close_under_pivot_type"    : "none", # pivot, sup1, sup2, sup3, res1, res2, res3
+            "close_under_pivot_offset"  : 1.0
         },
         20: {
             "ema_fast"                  : False,
@@ -640,12 +767,18 @@ class NostalgiaForInfinityNext(IStrategy):
             "sma200_rising_val"         : "50",
             "sma200_1h_rising"          : False,
             "sma200_1h_rising_val"      : "50",
-            "safe_dips"                 : False,
-            "safe_dips_type"            : "10",
+            "safe_dips_threshold_0"     : None,
+            "safe_dips_threshold_2"     : None,
+            "safe_dips_threshold_12"    : None,
+            "safe_dips_threshold_144"   : None,
             "safe_pump"                 : False,
             "safe_pump_type"            : "50",
             "safe_pump_period"          : "24",
-            "btc_1h_not_downtrend"      : False
+            "btc_1h_not_downtrend"      : False,
+            "close_over_pivot_type"     : "none", # pivot, sup1, sup2, sup3, res1, res2, res3
+            "close_over_pivot_offset"   : 1.0,
+            "close_under_pivot_type"    : "none", # pivot, sup1, sup2, sup3, res1, res2, res3
+            "close_under_pivot_offset"  : 1.0
         },
         21: {
             "ema_fast"                  : False,
@@ -660,12 +793,18 @@ class NostalgiaForInfinityNext(IStrategy):
             "sma200_rising_val"         : "50",
             "sma200_1h_rising"          : False,
             "sma200_1h_rising_val"      : "50",
-            "safe_dips"                 : True,
-            "safe_dips_type"            : "90",
+            "safe_dips_threshold_0"     : 0.025,
+            "safe_dips_threshold_2"     : 0.23,
+            "safe_dips_threshold_12"    : 0.4,
+            "safe_dips_threshold_144"   : 0.7,
             "safe_pump"                 : False,
             "safe_pump_type"            : "50",
             "safe_pump_period"          : "24",
-            "btc_1h_not_downtrend"      : False
+            "btc_1h_not_downtrend"      : False,
+            "close_over_pivot_type"     : "none", # pivot, sup1, sup2, sup3, res1, res2, res3
+            "close_over_pivot_offset"   : 1.0,
+            "close_under_pivot_type"    : "none", # pivot, sup1, sup2, sup3, res1, res2, res3
+            "close_under_pivot_offset"  : 1.0
         },
         22: {
             "ema_fast"                  : False,
@@ -680,12 +819,18 @@ class NostalgiaForInfinityNext(IStrategy):
             "sma200_rising_val"         : "50",
             "sma200_1h_rising"          : False,
             "sma200_1h_rising_val"      : "50",
-            "safe_dips"                 : True,
-            "safe_dips_type"            : "130",
+            "safe_dips_threshold_0"     : 0.028,
+            "safe_dips_threshold_2"     : 0.3,
+            "safe_dips_threshold_12"    : 0.48,
+            "safe_dips_threshold_144"   : 0.9,
             "safe_pump"                 : True,
             "safe_pump_type"            : "110",
             "safe_pump_period"          : "24",
-            "btc_1h_not_downtrend"      : False
+            "btc_1h_not_downtrend"      : False,
+            "close_over_pivot_type"     : "none", # pivot, sup1, sup2, sup3, res1, res2, res3
+            "close_over_pivot_offset"   : 1.0,
+            "close_under_pivot_type"    : "res3", # pivot, sup1, sup2, sup3, res1, res2, res3
+            "close_under_pivot_offset"  : 1.6
         },
         23: {
             "ema_fast"                  : False,
@@ -700,12 +845,18 @@ class NostalgiaForInfinityNext(IStrategy):
             "sma200_rising_val"         : "24",
             "sma200_1h_rising"          : False,
             "sma200_1h_rising_val"      : "50",
-            "safe_dips"                 : True,
-            "safe_dips_type"            : "110",
+            "safe_dips_threshold_0"     : 0.022,
+            "safe_dips_threshold_2"     : 0.1,
+            "safe_dips_threshold_12"    : 0.3,
+            "safe_dips_threshold_144"   : 0.84,
             "safe_pump"                 : True,
             "safe_pump_type"            : "100",
             "safe_pump_period"          : "24",
-            "btc_1h_not_downtrend"      : False
+            "btc_1h_not_downtrend"      : False,
+            "close_over_pivot_type"     : "none", # pivot, sup1, sup2, sup3, res1, res2, res3
+            "close_over_pivot_offset"   : 1.0,
+            "close_under_pivot_type"    : "none", # pivot, sup1, sup2, sup3, res1, res2, res3
+            "close_under_pivot_offset"  : 1.0
         },
         24: {
             "ema_fast"                  : False,
@@ -720,12 +871,18 @@ class NostalgiaForInfinityNext(IStrategy):
             "sma200_rising_val"         : "30",
             "sma200_1h_rising"          : True,
             "sma200_1h_rising_val"      : "36",
-            "safe_dips"                 : True,
-            "safe_dips_type"            : "20",
+            "safe_dips_threshold_0"     : 0.016,
+            "safe_dips_threshold_2"     : 0.11,
+            "safe_dips_threshold_12"    : 0.26,
+            "safe_dips_threshold_144"   : 0.44,
             "safe_pump"                 : False,
             "safe_pump_type"            : "10",
             "safe_pump_period"          : "24",
-            "btc_1h_not_downtrend"      : False
+            "btc_1h_not_downtrend"      : False,
+            "close_over_pivot_type"     : "none", # pivot, sup1, sup2, sup3, res1, res2, res3
+            "close_over_pivot_offset"   : 1.0,
+            "close_under_pivot_type"    : "none", # pivot, sup1, sup2, sup3, res1, res2, res3
+            "close_under_pivot_offset"  : 1.0
         },
         25: {
             "ema_fast"                  : False,
@@ -740,12 +897,18 @@ class NostalgiaForInfinityNext(IStrategy):
             "sma200_rising_val"         : "20",
             "sma200_1h_rising"          : True,
             "sma200_1h_rising_val"      : "36",
-            "safe_dips"                 : True,
-            "safe_dips_type"            : "80",
+            "safe_dips_threshold_0"     : 0.024,
+            "safe_dips_threshold_2"     : 0.22,
+            "safe_dips_threshold_12"    : 0.38,
+            "safe_dips_threshold_144"   : 0.66,
             "safe_pump"                 : True,
             "safe_pump_type"            : "120",
             "safe_pump_period"          : "24",
-            "btc_1h_not_downtrend"      : False
+            "btc_1h_not_downtrend"      : False,
+            "close_over_pivot_type"     : "pivot", # pivot, sup1, sup2, sup3, res1, res2, res3
+            "close_over_pivot_offset"   : 0.98,
+            "close_under_pivot_type"    : "res3", # pivot, sup1, sup2, sup3, res1, res2, res3
+            "close_under_pivot_offset"  : 1.4
         },
         26: {
             "ema_fast"                  : False,
@@ -756,16 +919,22 @@ class NostalgiaForInfinityNext(IStrategy):
             "close_above_ema_fast_len"  : "200",
             "close_above_ema_slow"      : False,
             "close_above_ema_slow_len"  : "200",
-            "sma200_rising"             : True,
+            "sma200_rising"             : False,
             "sma200_rising_val"         : "30",
             "sma200_1h_rising"          : False,
             "sma200_1h_rising_val"      : "50",
-            "safe_dips"                 : True,
-            "safe_dips_type"            : "100",
+            "safe_dips_threshold_0"     : 0.016,
+            "safe_dips_threshold_2"     : 0.1,
+            "safe_dips_threshold_12"    : 0.11,
+            "safe_dips_threshold_144"   : 0.22,
             "safe_pump"                 : True,
-            "safe_pump_type"            : "80",
+            "safe_pump_type"            : "100",
             "safe_pump_period"          : "36",
-            "btc_1h_not_downtrend"      : True
+            "btc_1h_not_downtrend"      : True,
+            "close_over_pivot_type"     : "none", # pivot, sup1, sup2, sup3, res1, res2, res3
+            "close_over_pivot_offset"   : 1.0,
+            "close_under_pivot_type"    : "res3", # pivot, sup1, sup2, sup3, res1, res2, res3
+            "close_under_pivot_offset"  : 1.35
         },
         27: {
             "ema_fast"                  : False,
@@ -780,18 +949,24 @@ class NostalgiaForInfinityNext(IStrategy):
             "sma200_rising_val"         : "30",
             "sma200_1h_rising"          : False,
             "sma200_1h_rising_val"      : "50",
-            "safe_dips"                 : True,
-            "safe_dips_type"            : "130",
+            "safe_dips_threshold_0"     : 0.028,
+            "safe_dips_threshold_2"     : 0.3,
+            "safe_dips_threshold_12"    : 0.48,
+            "safe_dips_threshold_144"   : 0.9,
             "safe_pump"                 : True,
             "safe_pump_type"            : "50",
             "safe_pump_period"          : "36",
-            "btc_1h_not_downtrend"      : True
+            "btc_1h_not_downtrend"      : True,
+            "close_over_pivot_type"     : "none", # pivot, sup1, sup2, sup3, res1, res2, res3
+            "close_over_pivot_offset"   : 1.0,
+            "close_under_pivot_type"    : "none", # pivot, sup1, sup2, sup3, res1, res2, res3
+            "close_under_pivot_offset"  : 1.0
         },
         28: {
             "ema_fast"                  : False,
             "ema_fast_len"              : "50",
-            "ema_slow"                  : False,
-            "ema_slow_len"              : "100",
+            "ema_slow"                  : True,
+            "ema_slow_len"              : "12",
             "close_above_ema_fast"      : False,
             "close_above_ema_fast_len"  : "50",
             "close_above_ema_slow"      : False,
@@ -800,12 +975,18 @@ class NostalgiaForInfinityNext(IStrategy):
             "sma200_rising_val"         : "30",
             "sma200_1h_rising"          : False,
             "sma200_1h_rising_val"      : "50",
-            "safe_dips"                 : True,
-            "safe_dips_type"            : "130",
+            "safe_dips_threshold_0"     : 0.028,
+            "safe_dips_threshold_2"     : 0.3,
+            "safe_dips_threshold_12"    : 0.48,
+            "safe_dips_threshold_144"   : 0.9,
             "safe_pump"                 : True,
-            "safe_pump_type"            : "110",
+            "safe_pump_type"            : "120",
             "safe_pump_period"          : "36",
-            "btc_1h_not_downtrend"      : True
+            "btc_1h_not_downtrend"      : False,
+            "close_over_pivot_type"     : "none", # pivot, sup1, sup2, sup3, res1, res2, res3
+            "close_over_pivot_offset"   : 0.99,
+            "close_under_pivot_type"    : "res3", # pivot, sup1, sup2, sup3, res1, res2, res3
+            "close_under_pivot_offset"  : 1.32
         },
         29: {
             "ema_fast"                  : False,
@@ -820,12 +1001,18 @@ class NostalgiaForInfinityNext(IStrategy):
             "sma200_rising_val"         : "30",
             "sma200_1h_rising"          : False,
             "sma200_1h_rising_val"      : "50",
-            "safe_dips"                 : False,
-            "safe_dips_type"            : "50",
+            "safe_dips_threshold_0"     : None,
+            "safe_dips_threshold_2"     : None,
+            "safe_dips_threshold_12"    : None,
+            "safe_dips_threshold_144"   : None,
             "safe_pump"                 : False,
             "safe_pump_type"            : "110",
             "safe_pump_period"          : "36",
-            "btc_1h_not_downtrend"      : False
+            "btc_1h_not_downtrend"      : False,
+            "close_over_pivot_type"     : "none", # pivot, sup1, sup2, sup3, res1, res2, res3
+            "close_over_pivot_offset"   : 1.0,
+            "close_under_pivot_type"    : "pivot", # pivot, sup1, sup2, sup3, res1, res2, res3
+            "close_under_pivot_offset"  : 1.01
         },
         30: {
             "ema_fast"                  : False,
@@ -840,12 +1027,18 @@ class NostalgiaForInfinityNext(IStrategy):
             "sma200_rising_val"         : "30",
             "sma200_1h_rising"          : False,
             "sma200_1h_rising_val"      : "50",
-            "safe_dips"                 : False,
-            "safe_dips_type"            : "130",
+            "safe_dips_threshold_0"     : None,
+            "safe_dips_threshold_2"     : None,
+            "safe_dips_threshold_12"    : None,
+            "safe_dips_threshold_144"   : None,
             "safe_pump"                 : False,
             "safe_pump_type"            : "110",
             "safe_pump_period"          : "36",
-            "btc_1h_not_downtrend"      : False
+            "btc_1h_not_downtrend"      : False,
+            "close_over_pivot_type"     : "none", # pivot, sup1, sup2, sup3, res1, res2, res3
+            "close_over_pivot_offset"   : 1.0,
+            "close_under_pivot_type"    : "none", # pivot, sup1, sup2, sup3, res1, res2, res3
+            "close_under_pivot_offset"  : 1.0
         },
         31: {
             "ema_fast"                  : False,
@@ -860,12 +1053,18 @@ class NostalgiaForInfinityNext(IStrategy):
             "sma200_rising_val"         : "30",
             "sma200_1h_rising"          : False,
             "sma200_1h_rising_val"      : "50",
-            "safe_dips"                 : True,
-            "safe_dips_type"            : "50",
+            "safe_dips_threshold_0"     : 0.02,
+            "safe_dips_threshold_2"     : 0.14,
+            "safe_dips_threshold_12"    : 0.32,
+            "safe_dips_threshold_144"   : 0.5,
             "safe_pump"                 : False,
             "safe_pump_type"            : "10",
             "safe_pump_period"          : "48",
-            "btc_1h_not_downtrend"      : False
+            "btc_1h_not_downtrend"      : True,
+            "close_over_pivot_type"     : "sup3", # pivot, sup1, sup2, sup3, res1, res2, res3
+            "close_over_pivot_offset"   : 0.98,
+            "close_under_pivot_type"    : "none", # pivot, sup1, sup2, sup3, res1, res2, res3
+            "close_under_pivot_offset"  : 1.0
         },
         32: {
             "ema_fast"                  : False,
@@ -880,18 +1079,24 @@ class NostalgiaForInfinityNext(IStrategy):
             "sma200_rising_val"         : "30",
             "sma200_1h_rising"          : True,
             "sma200_1h_rising_val"      : "50",
-            "safe_dips"                 : True,
-            "safe_dips_type"            : "130",
+            "safe_dips_threshold_0"     : 0.028,
+            "safe_dips_threshold_2"     : 0.3,
+            "safe_dips_threshold_12"    : 0.48,
+            "safe_dips_threshold_144"   : 0.9,
             "safe_pump"                 : True,
-            "safe_pump_type"            : "120",
+            "safe_pump_type"            : "80",
             "safe_pump_period"          : "48",
-            "btc_1h_not_downtrend"      : False
+            "btc_1h_not_downtrend"      : False,
+            "close_over_pivot_type"     : "none", # pivot, sup1, sup2, sup3, res1, res2, res3
+            "close_over_pivot_offset"   : 1.0,
+            "close_under_pivot_type"    : "none", # pivot, sup1, sup2, sup3, res1, res2, res3
+            "close_under_pivot_offset"  : 1.0
         },
         33: {
             "ema_fast"                  : False,
             "ema_fast_len"              : "50",
             "ema_slow"                  : True,
-            "ema_slow_len"              : "50",
+            "ema_slow_len"              : "12",
             "close_above_ema_fast"      : False,
             "close_above_ema_fast_len"  : "50",
             "close_above_ema_slow"      : False,
@@ -900,12 +1105,18 @@ class NostalgiaForInfinityNext(IStrategy):
             "sma200_rising_val"         : "30",
             "sma200_1h_rising"          : False,
             "sma200_1h_rising_val"      : "50",
-            "safe_dips"                 : True,
-            "safe_dips_type"            : "100",
+            "safe_dips_threshold_0"     : 0.028,
+            "safe_dips_threshold_2"     : 0.3,
+            "safe_dips_threshold_12"    : 0.48,
+            "safe_dips_threshold_144"   : 0.9,
             "safe_pump"                 : True,
-            "safe_pump_type"            : "10",
+            "safe_pump_type"            : "120",
             "safe_pump_period"          : "24",
-            "btc_1h_not_downtrend"      : False
+            "btc_1h_not_downtrend"      : False,
+            "close_over_pivot_type"     : "none", # pivot, sup1, sup2, sup3, res1, res2, res3
+            "close_over_pivot_offset"   : 1.0,
+            "close_under_pivot_type"    : "none", # pivot, sup1, sup2, sup3, res1, res2, res3
+            "close_under_pivot_offset"  : 1.0
         },
         34: {
             "ema_fast"                  : False,
@@ -920,18 +1131,24 @@ class NostalgiaForInfinityNext(IStrategy):
             "sma200_rising_val"         : "30",
             "sma200_1h_rising"          : False,
             "sma200_1h_rising_val"      : "50",
-            "safe_dips"                 : False,
-            "safe_dips_type"            : "100",
+            "safe_dips_threshold_0"     : 0.028,
+            "safe_dips_threshold_2"     : 0.3,
+            "safe_dips_threshold_12"    : 0.48,
+            "safe_dips_threshold_144"   : 0.9,
             "safe_pump"                 : False,
             "safe_pump_type"            : "10",
             "safe_pump_period"          : "24",
-            "btc_1h_not_downtrend"      : False
+            "btc_1h_not_downtrend"      : False,
+            "close_over_pivot_type"     : "none", # pivot, sup1, sup2, sup3, res1, res2, res3
+            "close_over_pivot_offset"   : 0.99,
+            "close_under_pivot_type"    : "none", # pivot, sup1, sup2, sup3, res1, res2, res3
+            "close_under_pivot_offset"  : 1.0
         },
         35: {
             "ema_fast"                  : False,
             "ema_fast_len"              : "50",
             "ema_slow"                  : False,
-            "ema_slow_len"              : "100",
+            "ema_slow_len"              : "12",
             "close_above_ema_fast"      : False,
             "close_above_ema_fast_len"  : "50",
             "close_above_ema_slow"      : False,
@@ -940,12 +1157,18 @@ class NostalgiaForInfinityNext(IStrategy):
             "sma200_rising_val"         : "30",
             "sma200_1h_rising"          : False,
             "sma200_1h_rising_val"      : "50",
-            "safe_dips"                 : False,
-            "safe_dips_type"            : "100",
-            "safe_pump"                 : False,
-            "safe_pump_type"            : "10",
+            "safe_dips_threshold_0"     : 0.028,
+            "safe_dips_threshold_2"     : 0.3,
+            "safe_dips_threshold_12"    : 0.48,
+            "safe_dips_threshold_144"   : 0.9,
+            "safe_pump"                 : True,
+            "safe_pump_type"            : "120",
             "safe_pump_period"          : "24",
-            "btc_1h_not_downtrend"      : False
+            "btc_1h_not_downtrend"      : False,
+            "close_over_pivot_type"     : "none", # pivot, sup1, sup2, sup3, res1, res2, res3
+            "close_over_pivot_offset"   : 1.0,
+            "close_under_pivot_type"    : "res3", # pivot, sup1, sup2, sup3, res1, res2, res3
+            "close_under_pivot_offset"  : 1.1
         },
         36: {
             "ema_fast"                  : False,
@@ -960,18 +1183,24 @@ class NostalgiaForInfinityNext(IStrategy):
             "sma200_rising_val"         : "30",
             "sma200_1h_rising"          : False,
             "sma200_1h_rising_val"      : "50",
-            "safe_dips"                 : False,
-            "safe_dips_type"            : "100",
+            "safe_dips_threshold_0"     : None,
+            "safe_dips_threshold_2"     : None,
+            "safe_dips_threshold_12"    : None,
+            "safe_dips_threshold_144"   : None,
             "safe_pump"                 : False,
             "safe_pump_type"            : "10",
             "safe_pump_period"          : "24",
-            "btc_1h_not_downtrend"      : False
+            "btc_1h_not_downtrend"      : False,
+            "close_over_pivot_type"     : "none", # pivot, sup1, sup2, sup3, res1, res2, res3
+            "close_over_pivot_offset"   : 1.0,
+            "close_under_pivot_type"    : "none", # pivot, sup1, sup2, sup3, res1, res2, res3
+            "close_under_pivot_offset"  : 1.0
         },
         37: {
-            "ema_fast"                  : False,
+            "ema_fast"                  : True,
             "ema_fast_len"              : "50",
-            "ema_slow"                  : False,
-            "ema_slow_len"              : "100",
+            "ema_slow"                  : True,
+            "ema_slow_len"              : "12",
             "close_above_ema_fast"      : False,
             "close_above_ema_fast_len"  : "200",
             "close_above_ema_slow"      : False,
@@ -980,12 +1209,18 @@ class NostalgiaForInfinityNext(IStrategy):
             "sma200_rising_val"         : "30",
             "sma200_1h_rising"          : False,
             "sma200_1h_rising_val"      : "50",
-            "safe_dips"                 : False,
-            "safe_dips_type"            : "100",
-            "safe_pump"                 : False,
-            "safe_pump_type"            : "100",
+            "safe_dips_threshold_0"     : 0.028,
+            "safe_dips_threshold_2"     : 0.3,
+            "safe_dips_threshold_12"    : 0.48,
+            "safe_dips_threshold_144"   : 0.9,
+            "safe_pump"                 : True,
+            "safe_pump_type"            : "120",
             "safe_pump_period"          : "48",
-            "btc_1h_not_downtrend"      : False
+            "btc_1h_not_downtrend"      : False,
+            "close_over_pivot_type"     : "none", # pivot, sup1, sup2, sup3, res1, res2, res3
+            "close_over_pivot_offset"   : 1.0,
+            "close_under_pivot_type"    : "res3", # pivot, sup1, sup2, sup3, res1, res2, res3
+            "close_under_pivot_offset"  : 1.5
         },
         38: {
             "ema_fast"                  : False,
@@ -1000,12 +1235,18 @@ class NostalgiaForInfinityNext(IStrategy):
             "sma200_rising_val"         : "30",
             "sma200_1h_rising"          : False,
             "sma200_1h_rising_val"      : "50",
-            "safe_dips"                 : True,
-            "safe_dips_type"            : "130",
+            "safe_dips_threshold_0"     : 0.028,
+            "safe_dips_threshold_2"     : 0.3,
+            "safe_dips_threshold_12"    : 0.48,
+            "safe_dips_threshold_144"   : 0.9,
             "safe_pump"                 : False,
             "safe_pump_type"            : "10",
             "safe_pump_period"          : "36",
-            "btc_1h_not_downtrend"      : True
+            "btc_1h_not_downtrend"      : True,
+            "close_over_pivot_type"     : "none", # pivot, sup1, sup2, sup3, res1, res2, res3
+            "close_over_pivot_offset"   : 1.0,
+            "close_under_pivot_type"    : "none", # pivot, sup1, sup2, sup3, res1, res2, res3
+            "close_under_pivot_offset"  : 1.0
         },
         39: {
             "ema_fast"                  : False,
@@ -1020,18 +1261,24 @@ class NostalgiaForInfinityNext(IStrategy):
             "sma200_rising_val"         : "30",
             "sma200_1h_rising"          : False,
             "sma200_1h_rising_val"      : "20",
-            "safe_dips"                 : False,
-            "safe_dips_type"            : "100",
+            "safe_dips_threshold_0"     : None,
+            "safe_dips_threshold_2"     : None,
+            "safe_dips_threshold_12"    : None,
+            "safe_dips_threshold_144"   : None,
             "safe_pump"                 : False,
             "safe_pump_type"            : "50",
             "safe_pump_period"          : "48",
-            "btc_1h_not_downtrend"      : True
+            "btc_1h_not_downtrend"      : True,
+            "close_over_pivot_type"     : "none", # pivot, sup1, sup2, sup3, res1, res2, res3
+            "close_over_pivot_offset"   : 1.0,
+            "close_under_pivot_type"    : "none", # pivot, sup1, sup2, sup3, res1, res2, res3
+            "close_under_pivot_offset"  : 1.0
         },
         40: {
             "ema_fast"                  : True,
-            "ema_fast_len"              : "12",
-            "ema_slow"                  : False,
-            "ema_slow_len"              : "25",
+            "ema_fast_len"              : "50",
+            "ema_slow"                  : True,
+            "ema_slow_len"              : "12",
             "close_above_ema_fast"      : False,
             "close_above_ema_fast_len"  : "200",
             "close_above_ema_slow"      : True,
@@ -1040,17 +1287,23 @@ class NostalgiaForInfinityNext(IStrategy):
             "sma200_rising_val"         : "30",
             "sma200_1h_rising"          : False,
             "sma200_1h_rising_val"      : "20",
-            "safe_dips"                 : True,
-            "safe_dips_type"            : "130",
-            "safe_pump"                 : False,
-            "safe_pump_type"            : "50",
+            "safe_dips_threshold_0"     : 0.028,
+            "safe_dips_threshold_2"     : 0.3,
+            "safe_dips_threshold_12"    : 0.48,
+            "safe_dips_threshold_144"   : 0.9,
+            "safe_pump"                 : True,
+            "safe_pump_type"            : "100",
             "safe_pump_period"          : "48",
-            "btc_1h_not_downtrend"      : True
+            "btc_1h_not_downtrend"      : True,
+            "close_over_pivot_type"     : "none", # pivot, sup1, sup2, sup3, res1, res2, res3
+            "close_over_pivot_offset"   : 1.0,
+            "close_under_pivot_type"    : "none", # pivot, sup1, sup2, sup3, res1, res2, res3
+            "close_under_pivot_offset"  : 1.2
         },
         41: {
             "ema_fast"                  : False,
             "ema_fast_len"              : "50",
-            "ema_slow"                  : False,
+            "ema_slow"                  : True,
             "ema_slow_len"              : "12",
             "close_above_ema_fast"      : False,
             "close_above_ema_fast_len"  : "200",
@@ -1060,12 +1313,18 @@ class NostalgiaForInfinityNext(IStrategy):
             "sma200_rising_val"         : "30",
             "sma200_1h_rising"          : False,
             "sma200_1h_rising_val"      : "20",
-            "safe_dips"                 : True,
-            "safe_dips_type"            : "130",
+            "safe_dips_threshold_0"     : 0.015,
+            "safe_dips_threshold_2"     : 0.1,
+            "safe_dips_threshold_12"    : 0.24,
+            "safe_dips_threshold_144"   : 0.42,
             "safe_pump"                 : True,
             "safe_pump_type"            : "120",
             "safe_pump_period"          : "24",
-            "btc_1h_not_downtrend"      : True
+            "btc_1h_not_downtrend"      : True,
+            "close_over_pivot_type"     : "none", # pivot, sup1, sup2, sup3, res1, res2, res3
+            "close_over_pivot_offset"   : 1.0,
+            "close_under_pivot_type"    : "none", # pivot, sup1, sup2, sup3, res1, res2, res3
+            "close_under_pivot_offset"  : 1.0
         },
         42: {
             "ema_fast"                  : False,
@@ -1080,12 +1339,18 @@ class NostalgiaForInfinityNext(IStrategy):
             "sma200_rising_val"         : "30",
             "sma200_1h_rising"          : False,
             "sma200_1h_rising_val"      : "20",
-            "safe_dips"                 : True,
-            "safe_dips_type"            : "110",
+            "safe_dips_threshold_0"     : 0.027,
+            "safe_dips_threshold_2"     : 0.26,
+            "safe_dips_threshold_12"    : 0.44,
+            "safe_dips_threshold_144"   : 0.84,
             "safe_pump"                 : True,
             "safe_pump_type"            : "10",
             "safe_pump_period"          : "24",
-            "btc_1h_not_downtrend"      : True
+            "btc_1h_not_downtrend"      : True,
+            "close_over_pivot_type"     : "none", # pivot, sup1, sup2, sup3, res1, res2, res3
+            "close_over_pivot_offset"   : 1.0,
+            "close_under_pivot_type"    : "none", # pivot, sup1, sup2, sup3, res1, res2, res3
+            "close_under_pivot_offset"  : 1.0
         },
         43: {
             "ema_fast"                  : False,
@@ -1100,12 +1365,18 @@ class NostalgiaForInfinityNext(IStrategy):
             "sma200_rising_val"         : "30",
             "sma200_1h_rising"          : False,
             "sma200_1h_rising_val"      : "20",
-            "safe_dips"                 : True,
-            "safe_dips_type"            : "70",
+            "safe_dips_threshold_0"     : 0.024,
+            "safe_dips_threshold_2"     : 0.22,
+            "safe_dips_threshold_12"    : 0.38,
+            "safe_dips_threshold_144"   : 0.66,
             "safe_pump"                 : False,
             "safe_pump_type"            : "100",
             "safe_pump_period"          : "24",
-            "btc_1h_not_downtrend"      : True
+            "btc_1h_not_downtrend"      : True,
+            "close_over_pivot_type"     : "none", # pivot, sup1, sup2, sup3, res1, res2, res3
+            "close_over_pivot_offset"   : 1.0,
+            "close_under_pivot_type"    : "none", # pivot, sup1, sup2, sup3, res1, res2, res3
+            "close_under_pivot_offset"  : 1.0
         },
         44: {
             "ema_fast"                  : False,
@@ -1120,16 +1391,22 @@ class NostalgiaForInfinityNext(IStrategy):
             "sma200_rising_val"         : "30",
             "sma200_1h_rising"          : False,
             "sma200_1h_rising_val"      : "20",
-            "safe_dips"                 : False,
-            "safe_dips_type"            : "100",
+            "safe_dips_threshold_0"     : None,
+            "safe_dips_threshold_2"     : None,
+            "safe_dips_threshold_12"    : None,
+            "safe_dips_threshold_144"   : None,
             "safe_pump"                 : False,
             "safe_pump_type"            : "100",
             "safe_pump_period"          : "24",
-            "btc_1h_not_downtrend"      : False
+            "btc_1h_not_downtrend"      : False,
+            "close_over_pivot_type"     : "none", # pivot, sup1, sup2, sup3, res1, res2, res3
+            "close_over_pivot_offset"   : 1.0,
+            "close_under_pivot_type"    : "none", # pivot, sup1, sup2, sup3, res1, res2, res3
+            "close_under_pivot_offset"  : 1.0
         },
         45: {
             "ema_fast"                  : True,
-            "ema_fast_len"              : "12",
+            "ema_fast_len"              : "15",
             "ema_slow"                  : True,
             "ema_slow_len"              : "12",
             "close_above_ema_fast"      : False,
@@ -1140,16 +1417,22 @@ class NostalgiaForInfinityNext(IStrategy):
             "sma200_rising_val"         : "20",
             "sma200_1h_rising"          : False,
             "sma200_1h_rising_val"      : "20",
-            "safe_dips"                 : True,
-            "safe_dips_type"            : "130",
+            "safe_dips_threshold_0"     : 0.028,
+            "safe_dips_threshold_2"     : 0.3,
+            "safe_dips_threshold_12"    : 0.48,
+            "safe_dips_threshold_144"   : 0.9,
             "safe_pump"                 : False,
             "safe_pump_type"            : "100",
             "safe_pump_period"          : "24",
-            "btc_1h_not_downtrend"      : True
+            "btc_1h_not_downtrend"      : True,
+            "close_over_pivot_type"     : "none", # pivot, sup1, sup2, sup3, res1, res2, res3
+            "close_over_pivot_offset"   : 1.0,
+            "close_under_pivot_type"    : "none", # pivot, sup1, sup2, sup3, res1, res2, res3
+            "close_under_pivot_offset"  : 1.0
         },
         46: {
             "ema_fast"                  : False,
-            "ema_fast_len"              : "12",
+            "ema_fast_len"              : "50",
             "ema_slow"                  : True,
             "ema_slow_len"              : "12",
             "close_above_ema_fast"      : False,
@@ -1160,12 +1443,18 @@ class NostalgiaForInfinityNext(IStrategy):
             "sma200_rising_val"         : "30",
             "sma200_1h_rising"          : False,
             "sma200_1h_rising_val"      : "20",
-            "safe_dips"                 : True,
-            "safe_dips_type"            : "130",
+            "safe_dips_threshold_0"     : 0.028,
+            "safe_dips_threshold_2"     : 0.06,
+            "safe_dips_threshold_12"    : 0.25,
+            "safe_dips_threshold_144"   : 0.26,
             "safe_pump"                 : False,
             "safe_pump_type"            : "100",
             "safe_pump_period"          : "24",
-            "btc_1h_not_downtrend"      : True
+            "btc_1h_not_downtrend"      : True,
+            "close_over_pivot_type"     : "none", # pivot, sup1, sup2, sup3, res1, res2, res3
+            "close_over_pivot_offset"   : 1.0,
+            "close_under_pivot_type"    : "res3", # pivot, sup1, sup2, sup3, res1, res2, res3
+            "close_under_pivot_offset"  : 2.0
         },
         47: {
             "ema_fast"                  : False,
@@ -1180,12 +1469,18 @@ class NostalgiaForInfinityNext(IStrategy):
             "sma200_rising_val"         : "30",
             "sma200_1h_rising"          : False,
             "sma200_1h_rising_val"      : "24",
-            "safe_dips"                 : True,
-            "safe_dips_type"            : "130",
+            "safe_dips_threshold_0"     : 0.025,
+            "safe_dips_threshold_2"     : 0.05,
+            "safe_dips_threshold_12"    : 0.25,
+            "safe_dips_threshold_144"   : 0.5,
             "safe_pump"                 : True,
             "safe_pump_type"            : "120",
             "safe_pump_period"          : "24",
-            "btc_1h_not_downtrend"      : False
+            "btc_1h_not_downtrend"      : False,
+            "close_over_pivot_type"     : "none", # pivot, sup1, sup2, sup3, res1, res2, res3
+            "close_over_pivot_offset"   : 1.0,
+            "close_under_pivot_type"    : "none", # pivot, sup1, sup2, sup3, res1, res2, res3
+            "close_under_pivot_offset"  : 1.0
         },
         48: {
             "ema_fast"                  : True,
@@ -1200,80 +1495,21 @@ class NostalgiaForInfinityNext(IStrategy):
             "sma200_rising_val"         : "30",
             "sma200_1h_rising"          : True,
             "sma200_1h_rising_val"      : "24",
-            "safe_dips"                 : False,
-            "safe_dips_type"            : "130",
+            "safe_dips_threshold_0"     : None,
+            "safe_dips_threshold_2"     : None,
+            "safe_dips_threshold_12"    : None,
+            "safe_dips_threshold_144"   : None,
             "safe_pump"                 : False,
             "safe_pump_type"            : "120",
             "safe_pump_period"          : "24",
-            "btc_1h_not_downtrend"      : False
+            "btc_1h_not_downtrend"      : False,
+            "close_over_pivot_type"     : "none", # pivot, sup1, sup2, sup3, res1, res2, res3
+            "close_over_pivot_offset"   : 1.0,
+            "close_under_pivot_type"    : "none", # pivot, sup1, sup2, sup3, res1, res2, res3
+            "close_under_pivot_offset"  : 1.0
+
         }
     }
-
-    # Strict dips - level 10
-    buy_dip_threshold_10_1 = 0.015
-    buy_dip_threshold_10_2 = 0.1
-    buy_dip_threshold_10_3 = 0.24
-    buy_dip_threshold_10_4 = 0.42
-    # Strict dips - level 20
-    buy_dip_threshold_20_1 = 0.016
-    buy_dip_threshold_20_2 = 0.11
-    buy_dip_threshold_20_3 = 0.26
-    buy_dip_threshold_20_4 = 0.44
-    # Strict dips - level 30
-    buy_dip_threshold_30_1 = 0.018
-    buy_dip_threshold_30_2 = 0.12
-    buy_dip_threshold_30_3 = 0.28
-    buy_dip_threshold_30_4 = 0.46
-    # Strict dips - level 40
-    buy_dip_threshold_40_1 = 0.019
-    buy_dip_threshold_40_2 = 0.13
-    buy_dip_threshold_40_3 = 0.3
-    buy_dip_threshold_40_4 = 0.48
-    # Normal dips - level 50
-    buy_dip_threshold_50_1 = 0.02
-    buy_dip_threshold_50_2 = 0.14
-    buy_dip_threshold_50_3 = 0.32
-    buy_dip_threshold_50_4 = 0.5
-    # Normal dips - level 60
-    buy_dip_threshold_60_1 = 0.022
-    buy_dip_threshold_60_2 = 0.18
-    buy_dip_threshold_60_3 = 0.34
-    buy_dip_threshold_60_4 = 0.56
-    # Normal dips - level 70
-    buy_dip_threshold_70_1 = 0.023
-    buy_dip_threshold_70_2 = 0.2
-    buy_dip_threshold_70_3 = 0.36
-    buy_dip_threshold_70_4 = 0.6
-    # Normal dips - level 80
-    buy_dip_threshold_80_1 = 0.024
-    buy_dip_threshold_80_2 = 0.22
-    buy_dip_threshold_80_3 = 0.38
-    buy_dip_threshold_80_4 = 0.66
-    # Normal dips - level 70
-    buy_dip_threshold_90_1 = 0.025
-    buy_dip_threshold_90_2 = 0.23
-    buy_dip_threshold_90_3 = 0.4
-    buy_dip_threshold_90_4 = 0.7
-    # Loose dips - level 100
-    buy_dip_threshold_100_1 = 0.026
-    buy_dip_threshold_100_2 = 0.24
-    buy_dip_threshold_100_3 = 0.42
-    buy_dip_threshold_100_4 = 0.8
-    # Loose dips - level 110
-    buy_dip_threshold_110_1 = 0.027
-    buy_dip_threshold_110_2 = 0.26
-    buy_dip_threshold_110_3 = 0.44
-    buy_dip_threshold_110_4 = 0.84
-    # Loose dips - level 120
-    buy_dip_threshold_120_1 = 0.028
-    buy_dip_threshold_120_2 = 0.28
-    buy_dip_threshold_120_3 = 0.46
-    buy_dip_threshold_120_4 = 0.86
-    # Loose dips - level 130
-    buy_dip_threshold_130_1 = 0.028
-    buy_dip_threshold_130_2 = 0.3
-    buy_dip_threshold_130_3 = 0.48
-    buy_dip_threshold_130_4 = 0.9
 
     # 24 hours - level 10
     buy_pump_pull_threshold_10_24 = 2.2
@@ -1414,176 +1650,168 @@ class NostalgiaForInfinityNext(IStrategy):
     buy_dump_protection_60_5 = 0.74
 
     buy_1_min_inc = 0.022
-    buy_1_rsi_1h_min = 20.0
+    buy_1_rsi_max = 32.0
+    buy_2_r_14_max = -75.0
+    buy_1_mfi_max = 46.0
+    buy_1_rsi_1h_min = 30.0
     buy_1_rsi_1h_max = 84.0
-    buy_1_rsi = 33.0
-    buy_1_mfi = 50.0
-    buy_1_cti_1h = 0.55
 
-    buy_2_rsi_1h_diff = 37.0
-    buy_2_mfi = 35.0
-    buy_2_bb_offset = 0.998
-    buy_2_cti_max = -0.65
-    buy_2_r_480_min = -90.0
-    buy_2_r_480_max = -35.0
-    buy_2_cti_1h_max = 0.82
-    buy_2_r_480_1h_min = -60.0
-    buy_2_r_480_1h_max = -10.0
+    buy_2_rsi_1h_diff = 39.0
+    buy_2_mfi = 49.0
+    buy_2_cti_max = -0.9
+    buy_2_r_480_min = -95.0
+    buy_2_r_480_max = -46.0
+    buy_2_cti_1h_max = 0.9
     buy_2_volume = 2.0
 
-    buy_bb40_bbdelta_close_3 = 0.045
-    buy_bb40_closedelta_close_3 = 0.023
-    buy_bb40_tail_bbdelta_3 = 0.418
-    buy_ema_rel_3 = 0.986
-    buy_cti_3 = -0.5
+    buy_3_bb40_bbdelta_close = 0.057
+    buy_3_bb40_closedelta_close = 0.023
+    buy_3_bb40_tail_bbdelta = 0.418
+    buy_3_cti_max = -0.5
+    buy_3_cci_36_osc_min = -0.25
+    buy_3_crsi_1h_min = 20.0
+    buy_3_r_480_1h_min = -48.0
+    buy_3_cti_1h_max = 0.82
 
-    buy_bb20_close_bblowerband_4 = 0.979
-    buy_bb20_volume_4 = 10.0
-    buy_cti_4 = -0.8
+    buy_4_bb20_close_bblowerband = 0.98
+    buy_4_bb20_volume = 10.0
+    buy_4_cti_max = -0.8
 
     buy_5_ema_rel = 0.84
-    buy_5_ema_open_mult = 0.018
-    buy_5_bb_offset = 0.996
-    buy_5_cti = -0.82
-    buy_5_crsi_1h = 24.0
-    buy_5_volume = 1.8
+    buy_5_ema_open_mult = 0.02
+    buy_5_bb_offset = 0.999
+    buy_5_cti_max = -0.5
+    buy_5_r_14_max = -94.0
+    buy_5_rsi_14_min = 25.0
+    buy_5_mfi_min = 18.0
+    buy_5_crsi_1h_min = 12.0
+    buy_5_volume = 1.6
 
     buy_6_ema_open_mult = 0.019
-    buy_6_bb_offset = 0.977
-    buy_6_crsi_1h_min = 5.0
+    buy_6_bb_offset = 0.984
+    buy_6_r_14_max = -85.0
+    buy_6_crsi_1h_min = 15.0
+    buy_6_cti_1h_min = 0.0
 
-    buy_7_ema_open_mult = 0.0302
-    buy_7_cti = -0.89
-    buy_7_ma_offset = 0.932
-    buy_7_rsi = 42.0
-    buy_7_cmf_1h = -0.16
+    buy_7_ema_open_mult = 0.031
+    buy_7_ma_offset = 0.978
+    buy_7_cti_max = -0.9
+    buy_7_rsi_max = 45.0
 
-    buy_8_cti = -0.88
-    buy_8_bb_offset = 0.998
+    buy_8_bb_offset = 0.986
+    buy_8_r_14_max = -98.0
+    buy_8_cti_1h_max = 0.95
+    buy_8_r_480_1h_max = -18.0
     buy_8_volume = 1.8
-    buy_8_r_480 = -45.0
-    buy_8_cti_1h = 0.95
-    buy_8_r_480_1h_min = -75.0
-    buy_8_r_480_1h_max = -20.0
-    buy_8_cmf_min = -0.4
-    buy_8_cmf_max = -0.18
 
     buy_9_ma_offset = 0.968
-    buy_9_bb_offset = 0.98
+    buy_9_bb_offset = 0.982
     buy_9_mfi_max = 50.0
-    buy_8_cti_max = -0.84
+    buy_9_cti_max = -0.85
+    buy_9_r_14_max = -94.0
     buy_9_rsi_1h_min = 20.0
     buy_9_rsi_1h_max = 88.0
-    buy_9_crsi_1h_min = 20.0
+    buy_9_crsi_1h_min = 21.0
 
-    buy_10_ma_offset_low = 0.92
     buy_10_ma_offset_high = 0.94
-    buy_10_bb_offset = 0.98
+    buy_10_bb_offset = 0.984
+    buy_10_r_14_max = -88.0
     buy_10_cti_1h_min = -0.5
     buy_10_cti_1h_max = 0.94
-    buy_10_r_480_1h = -65.0
 
-    buy_11_ma_offset = 0.955
-    buy_11_min_inc = 0.038
-    buy_11_rsi_1h_min = 46.0
+    buy_11_ma_offset = 0.956
+    buy_11_min_inc = 0.022
+    buy_11_rsi_max = 37.0
+    buy_11_mfi_max = 46.0
+    buy_11_cci_max = -120.0
+    buy_11_r_480_max = -32.0
+    buy_11_rsi_1h_min = 30.0
     buy_11_rsi_1h_max = 84.0
-    buy_11_rsi = 37.0
-    buy_11_mfi = 36.0
-    buy_11_r_480 = -32.0
-    buy_11_r_480_1h = -16.0
+    buy_11_cti_1h_max = 0.91
+    buy_11_r_480_1h_max = -25.0
+    buy_11_crsi_1h_min = 26.0
 
-    buy_ma_offset_12 = 0.921
-    buy_rsi_12 = 28.0
-    buy_ewo_12 = 1.8
-    buy_cti_12 = -0.7
+    buy_12_ma_offset = 0.927
+    buy_12_ewo_min = 2.0
+    buy_12_rsi_max = 32.0
+    buy_12_cti_max = -0.9
 
     buy_13_ma_offset = 0.99
-    buy_13_cti = -0.82
-    buy_13_ewo = -6.5
-    buy_13_r_1h = -78.0
+    buy_13_cti_max = -0.92
+    buy_13_ewo_max = -6.0
+    buy_13_cti_1h_max = -0.88
+    buy_13_crsi_1h_min = 10.0
 
     buy_14_ema_open_mult = 0.014
     buy_14_bb_offset = 0.989
     buy_14_ma_offset = 0.945
-    buy_14_cti = -0.85
+    buy_14_cti_max = -0.85
 
-    buy_15_ema_rel = 0.974
     buy_15_ema_open_mult = 0.0238
     buy_15_ma_offset = 0.958
     buy_15_rsi_min = 28.0
+    buy_15_cti_1h_min = -0.2
 
-    buy_16_ma_offset = 0.955
-    buy_16_rsi = 30.0
-    buy_16_ewo = 2.8
-    buy_16_cti = -0.9
-    buy_16_cti_1h = 0.9
-    buy_16_r = -30.0
-    buy_16_r_1h = -20.0
+    buy_16_ma_offset = 0.942
+    buy_16_ewo_min = 2.0
+    buy_16_rsi_max = 36.0
+    buy_16_cti_max = -0.9
 
-    buy_17_ma_offset = 0.99
-    buy_17_ewo = -9.6
-    buy_17_cti = -0.96
-    buy_17_cti_1h = -0.92
-    buy_17_r_1h = -20.0
+    buy_17_ma_offset = 0.999
+    buy_17_ewo_max = -7.0
+    buy_17_cti_max = -0.96
+    buy_17_crsi_1h_min = 12.0
     buy_17_volume = 2.0
 
-    buy_18_rsi = 33.5
     buy_18_bb_offset = 0.986
+    buy_18_rsi_max = 33.5
+    buy_18_cti_max = -0.85
+    buy_18_cti_1h_max = 0.91
     buy_18_volume = 2.0
-    buy_18_cti = -0.86
-    buy_18_cti_1h = 0.91
 
-    buy_rsi_1h_min_19 = 30.0
-    buy_chop_max_19 = 21.3
+    buy_19_rsi_1h_min = 30.0
+    buy_19_chop_max = 21.3
 
-    buy_rsi_20 = 36.0
-    buy_rsi_1h_20 = 16.0
-    buy_cti_20 = -0.84
-    buy_volume_20 = 2.0
+    buy_20_rsi_14_max = 36.0
+    buy_20_rsi_14_1h_max = 16.0
+    buy_20_cti_max = -0.84
+    buy_20_volume = 2.0
 
-    buy_rsi_21 = 14.0
-    buy_rsi_1h_21 = 28.0
-    buy_cti_21 = -0.902
-    buy_volume_21 = 2.0
+    buy_21_rsi_14_max = 14.0
+    buy_21_rsi_14_1h_max = 28.0
+    buy_21_cti_max = -0.902
+    buy_21_volume = 2.0
 
     buy_22_volume = 2.0
     buy_22_bb_offset = 0.984
-    buy_22_ma_offset = 0.968
-    buy_22_ewo = 5.0
-    buy_22_rsi = 36.0
-    buy_22_cti = -0.5
-    buy_22_cti_1h = -0.5
-    buy_22_r = -40.0
+    buy_22_ma_offset = 0.98
+    buy_22_ewo_min = 5.6
+    buy_22_rsi_14_max = 36.0
+    buy_22_cti_max = -0.54
+    buy_22_r_480_max = -40.0
+    buy_22_cti_1h_min = -0.5
 
     buy_23_bb_offset = 0.984
-    buy_23_ewo_min = 3.5
-    buy_23_rsi_max = 28.0
+    buy_23_ewo_min = 3.4
+    buy_23_rsi_14_max = 28.0
     buy_23_cti_max = -0.74
-    buy_23_rsi_1h_max = 80.0
-    buy_23_r_1h_min = -95.0
+    buy_23_rsi_14_1h_max = 80.0
+    buy_23_r_480_1h_min = -95.0
     buy_23_cti_1h_max = 0.92
 
-    buy_24_rsi_max = 50.0
-    buy_24_rsi_1h_min = 66.9
+    buy_24_rsi_14_max = 50.0
+    buy_24_rsi_14_1h_min = 66.9
 
     buy_25_ma_offset = 0.953
-    buy_25_rsi_4 = 30.0
-    buy_25_cti = -0.88
-    buy_25_ma_offset_low = 0.918
-    buy_25_cti_1h_min = 0.1
-    buy_25_cti_1h_max = 0.82
-    buy_25_r_1h = -75.0
-    buy_25_crsi_1h_min = 10.0
-    buy_25_crsi_1h_max = 50.0
+    buy_25_rsi_4_max = 30.0
+    buy_25_cti_max = -0.78
+    buy_25_cci_max = -200.0
 
-    buy_25_ma_offset_low = 0.945
-    buy_25_ma_offset_high = 0.978
-    buy_26_zema_low_offset = 0.94
-    buy_26_cti_max = -0.91
-    buy_26_r_min = -90.0
-    buy_26_r_1h_min = -90.0
+    buy_26_zema_low_offset = 0.9405
+    buy_26_cti_max = -0.72
+    buy_26_cci_max = -166.0
+    buy_26_r_14_max = -98.0
     buy_26_cti_1h_max = 0.95
-    buy_26_crsi_1h_min = 20.0
     buy_26_volume = 2.0
 
     buy_27_wr_max = -95.0
@@ -1592,141 +1820,143 @@ class NostalgiaForInfinityNext(IStrategy):
     buy_27_rsi_max = 46.0
     buy_27_volume = 2.0
 
-    buy_28_ma_offset = 0.984
-    buy_28_ewo = 7.2
-    buy_28_rsi = 32.2
-    buy_28_cti = -0.9
-    buy_28_cti_1h = 0.95
+    buy_28_ma_offset = 0.928
+    buy_28_ewo_min = 2.0
+    buy_28_rsi_14_max = 33.4
+    buy_28_cti_max = -0.84
+    buy_28_r_14_max = -97.0
+    buy_28_cti_1h_max = 0.95
 
-    buy_29_ma_offset = 0.94
-    buy_29_ewo = -4.0
-    buy_29_cti = -0.95
+    buy_29_ma_offset = 0.984
+    buy_29_ewo_max = -4.2
+    buy_29_cti_max = -0.96
 
-    buy_30_ma_offset = 0.945
-    buy_30_ewo = 7.4
-    buy_30_rsi = 40.0
-    buy_30_cti = -0.87
+    buy_30_ma_offset = 0.962
+    buy_30_ewo_min = 6.4
+    buy_30_rsi_14_max = 34.0
+    buy_30_cti_max = -0.87
+    buy_30_r_14_max = -97.0
 
     buy_31_ma_offset = 0.962
-    buy_31_ewo = -10.4
-    buy_31_wr = -90.0
-    buy_31_cti = -0.898
+    buy_31_ewo_max = -5.2
+    buy_31_r_14_max = -94.0
+    buy_31_cti_max = -0.9
 
     buy_32_ma_offset = 0.942
-    buy_32_rsi = 46.0
-    buy_32_cti = -0.86
-    buy_32_cti_1h = -0.22
-    buy_32_r_480_1h = -38.0
-    buy_32_crsi_1h = 10.0
+    buy_32_rsi_4_max = 46.0
+    buy_32_cti_max = -0.86
+    buy_32_crsi_1h_min = 10.0
 
     buy_33_ma_offset = 0.988
-    buy_33_rsi = 32.0
-    buy_33_cti = -0.88
-    buy_33_ewo = 6.4
+    buy_33_ewo_min = 9.0
+    buy_33_rsi_max = 32.0
+    buy_33_cti_max = -0.88
+    buy_33_r_14_max = -98.0
+    buy_33_cti_1h_max = 0.92
     buy_33_volume = 2.0
 
-    buy_34_ma_offset = 0.93
-    buy_34_dip = 0.005
-    buy_34_ewo = -6.0
-    buy_34_cti = -0.88
+    buy_34_ma_offset = 0.97
+    buy_34_ewo_max = -4.0
+    buy_34_cti_max = -0.95
+    buy_34_r_14_max = -99.9
+    buy_34_crsi_1h_min = 8.0
     buy_34_volume = 2.0
 
     buy_35_ma_offset = 0.984
-    buy_35_ewo = 9.6
-    buy_35_rsi = 32.0
-    buy_35_cti = -0.5
+    buy_35_ewo_min = 7.8
+    buy_35_rsi_max = 32.0
+    buy_35_cti_max = -0.8
+    buy_35_r_14_max = -95.0
 
     buy_36_ma_offset = 0.98
-    buy_36_ewo = -8.8
-    buy_36_cti = -0.8
+    buy_36_ewo_max = -5.0
+    buy_36_cti_max = -0.82
+    buy_36_r_14_max = -97.0
+    buy_36_crsi_1h_min = 12.0
 
-    buy_37_ma_offset = 0.98
-    buy_37_ewo = 9.8
-    buy_37_rsi = 56.0
-    buy_37_cti = -0.7
+    buy_37_ma_offset = 0.984
+    buy_37_ewo_min = 8.3
+    buy_37_ewo_max = 11.1
+    buy_37_rsi_14_min = 26.0
+    buy_37_rsi_14_max = 46.0
+    buy_37_crsi_1h_min = 12.0
+    buy_37_crsi_1h_max = 56.0
+    buy_37_cti_max = -0.85
+    buy_37_cti_1h_max = 0.92
+    buy_37_r_14_max = -97.0
+    buy_37_close_1h_max = 0.1
 
     buy_38_ma_offset = 0.98
-    buy_38_ewo = -6.5
-    buy_38_cti = -0.96
+    buy_38_ewo_max = -4.4
+    buy_38_cti_max = -0.95
+    buy_38_r_14_max = -97.0
+    buy_38_crsi_1h_min = 0.5
 
-    buy_39_cti = -0.1
-    buy_39_r_1h = -22.0
+    buy_39_cti_max = -0.1
+    buy_39_r_1h_max = -22.0
     buy_39_cti_1h_min = -0.1
     buy_39_cti_1h_max = 0.4
 
-    buy_40_crsi = 50.0
-    buy_40_cci = -250.0
-    buy_40_rsi = 31.0
-    buy_40_cti = -0.8
-    buy_40_r_1h = -90.0
+    buy_40_cci_max = -150.0
+    buy_40_rsi_max = 30.0
+    buy_40_r_14_max = -99.9
+    buy_40_cti_max = -0.8
 
-    buy_41_ewo_1h_min = 4.0
-    buy_41_crsi_1h_min = 10.0
-    buy_41_cti_1h_max = 0.85
-    buy_41_r_1h_min = -75.0
-    buy_41_r_1h_max = -14.0
-    buy_41_ma_offset_low = 0.92
     buy_41_ma_offset_high = 0.95
-    buy_41_cti_max = -0.9
+    buy_41_cti_max = -0.95
     buy_41_cci_max = -178.0
-    buy_41_r_max = -10.0
+    buy_41_ewo_1h_min = 0.5
+    buy_41_r_480_1h_max = -14.0
+    buy_41_crsi_1h_min = 14.0
 
-    buy_42_ewo_1h_min = 3.5
-    buy_42_cti_1h_min = -0.5
-    buy_42_cti_1h_max = 0.85
-    buy_42_r_1h_min = -90.0
-    buy_42_r_1h_max = -10.0
     buy_42_ema_open_mult = 0.018
     buy_42_bb_offset = 0.992
+    buy_42_ewo_1h_min = 2.8
+    buy_42_cti_1h_min = -0.5
+    buy_42_cti_1h_max = 0.88
+    buy_42_r_480_1h_max = -12.0
 
-    buy_43_cti_1h = 0.5
-    buy_43_r_1h = -80.0
-    buy_43_bb40_bbdelta_close = 0.046
+    buy_43_bb40_bbdelta_close = 0.045
     buy_43_bb40_closedelta_close = 0.02
     buy_43_bb40_tail_bbdelta = 0.5
-    buy_43_cti = -0.6
-    buy_43_r = -90.0
+    buy_43_cti_max = -0.75
+    buy_43_r_480_min = -94.0
+    buy_43_cti_1h_max = 0.45
+    buy_43_r_480_1h_min = -80.0
 
     buy_44_ma_offset = 0.982
-    buy_44_ewo = -18.0
-    buy_44_cti = -0.73
-    buy_44_crsi_1h = 10.0
+    buy_44_ewo_max = -18.0
+    buy_44_cti_max = -0.73
+    buy_44_crsi_1h_min = 8.0
 
     buy_45_bb40_bbdelta_close = 0.039
-    buy_45_bb40_closedelta_close = 0.02
+    buy_45_bb40_closedelta_close = 0.0231
     buy_45_bb40_tail_bbdelta = 0.24
-    buy_45_ma_offset = 0.94
+    buy_45_ma_offset = 0.948
+    buy_45_ewo_min = 2.0
     buy_45_ewo_1h_min = 2.0
-    buy_45_cti_1h_min = -0.5
-    buy_45_cti_1h_max = 0.9
-    buy_45_r_1h_min = -90.0
-    buy_45_r_1h_max = -25.0
-    buy_45_r = -10.0
+    buy_45_cti_1h_max = 0.76
+    buy_45_r_480_1h_max = -20.0
 
-    buy_46_ema_open_mult = 0.02
-    buy_46_bb_offset = 0.999
-    buy_46_ewo_1h_min = 3.5
-    buy_46_cti_1h_min = -0.7
-    buy_46_cti_1h_max = 0.66
-    buy_46_r_1h_min = -70.0
-    buy_46_r_1h_max = -34.0
-    buy_46_r_max = -70.0
+    buy_46_ema_open_mult = 0.0332
+    buy_46_ewo_1h_min = 0.5
+    buy_46_cti_1h_min = -0.9
+    buy_46_cti_1h_max = 0.5
 
-    buy_47_ewo_min = 4.0
-    buy_47_ma_offset = 0.974
-    buy_47_rsi_diff = 43.0
-    buy_47_ewo_1h_min = 4.5
-    buy_47_r_1h_min = -90.0
-    buy_47_r_1h_max = -16.0
-    buy_47_cti_1h_min = -0.7
-    buy_47_cti_1h_max = 0.95
-    buy_47_crsi_1h_min = 10.0
+    buy_47_ewo_min = 3.2
+    buy_47_ma_offset = 0.952
+    buy_47_rsi_14_max = 46.0
+    buy_47_cti_max = -0.93
+    buy_47_r_14_max = -97.0
+    buy_47_ewo_1h_min = 2.0
+    buy_47_cti_1h_min = -0.9
+    buy_47_cti_1h_max = 0.3
 
-    buy_48_ewo_min = 8.0
+    buy_48_ewo_min = 8.5
     buy_48_ewo_1h_min = 14.0
-    buy_48_r_min = -25.0
-    buy_48_r_1h_min = -50.0
-    buy_48_r_1h_max = -10.0
+    buy_48_r_480_min = -25.0
+    buy_48_r_480_1h_min = -50.0
+    buy_48_r_480_1h_max = -10.0
     buy_48_cti_1h_min = 0.5
     buy_48_crsi_1h_min = 10.0
 
@@ -1756,11 +1986,11 @@ class NostalgiaForInfinityNext(IStrategy):
     sell_pump_threshold_24_2 = 0.62
     sell_pump_threshold_24_3 = 0.88
 
-    sell_rsi_bb_1 = 79.5
+    sell_rsi_bb_1 = 79.0
 
-    sell_rsi_bb_2 = 81
+    sell_rsi_bb_2 = 80.0
 
-    sell_rsi_main_3 = 87.0
+    sell_rsi_main_3 = 83.0
 
     sell_dual_rsi_rsi_4 = 73.4
     sell_dual_rsi_rsi_1h_4 = 79.6
@@ -1984,7 +2214,7 @@ class NostalgiaForInfinityNext(IStrategy):
     # Profit Target Signal
     profit_target_1_enable = False
     #############################################################
-    
+
     # CACHES
 
     hold_trades_cache = None
@@ -2036,6 +2266,129 @@ class NostalgiaForInfinityNext(IStrategy):
         if self.hold_trades_cache:
             self.hold_trades_cache.load()
 
+    def whitelist_tracker(self):
+        if sorted(self.coin_metrics['current_whitelist']) != sorted(self.dp.current_whitelist()):
+            log.info("Whitelist has changed...")
+            self.coin_metrics['top_traded_updated'] = False
+            self.coin_metrics['top_grossing_updated'] = False
+
+            # Update pairlist
+            self.coin_metrics['current_whitelist'] = self.dp.current_whitelist()
+
+            # Move up BTC for largest data footprint
+            self.coin_metrics['current_whitelist'].insert(0, self.coin_metrics['current_whitelist'].pop(self.coin_metrics['current_whitelist'].index(f"BTC/{self.config['stake_currency']}")))
+
+    def top_traded_list(self):
+        log.info("Updating top traded pairlist...")
+        tik = time.perf_counter()
+
+        self.coin_metrics['tt_dataframe'] = DataFrame()
+
+        # Build traded volume dataframe
+        for coin_pair in self.coin_metrics['current_whitelist']:
+            coin = coin_pair.split('/')[0]
+
+            # Get the volume for the daily informative timeframe and name the column for the coin
+            pair_dataframe = self.dp.get_pair_dataframe(pair=coin_pair, timeframe=self.info_timeframe_1d)
+            pair_dataframe.set_index('date')
+
+            if self.config['runmode'].value in ('live', 'dry_run'):
+                pair_dataframe = pair_dataframe.iloc[-7:,:]
+
+            # Set the date index of the self.coin_metrics['tt_dataframe'] once
+            if not 'date' in self.coin_metrics['tt_dataframe']:
+                self.coin_metrics['tt_dataframe']['date'] = pair_dataframe['date']
+                self.coin_metrics['tt_dataframe'].set_index('date')
+
+            # Calculate daily traded volume
+            pair_dataframe[coin] = pair_dataframe['volume'] * qtpylib.typical_price(pair_dataframe)
+
+            # Drop the columns we don't need
+            pair_dataframe.drop(columns=['open', 'high', 'low', 'close', 'volume'], inplace=True)
+
+            # Merge it in on the date key
+            self.coin_metrics['tt_dataframe'] = self.coin_metrics['tt_dataframe'].merge(pair_dataframe, on='date', how='left')
+
+        # Forward fill empty cells (due to different df shapes)
+        self.coin_metrics['tt_dataframe'].fillna(0, inplace=True)
+
+        # Store and drop date column for value sorting
+        pair_dates = self.coin_metrics['tt_dataframe']['date']
+        self.coin_metrics['tt_dataframe'].drop(columns=['date'], inplace=True)
+
+        # Build columns and top traded coins
+        column_names = [f"Coin #{i}" for i in range(1, self.coin_metrics['top_traded_len'] + 1)]
+        self.coin_metrics['tt_dataframe'][column_names] = self.coin_metrics['tt_dataframe'].apply(lambda x: x.nlargest(self.coin_metrics['top_traded_len']).index.values, axis=1, result_type='expand')
+        self.coin_metrics['tt_dataframe'].drop(columns=[col for col in self.coin_metrics['tt_dataframe'] if col not in column_names], inplace=True)
+
+        # Re-add stored date column
+        self.coin_metrics['tt_dataframe'].insert(loc = 0, column = 'date', value = pair_dates)
+        self.coin_metrics['tt_dataframe'].set_index('date')
+        self.coin_metrics['top_traded_updated'] = True
+        log.info("Updated top traded pairlist (tail-5):")
+        log.info(f"\n{self.coin_metrics['tt_dataframe'].tail(5)}")
+
+        tok = time.perf_counter()
+        log.info(f"Updating top traded pairlist took {tok - tik:0.4f} seconds...")
+
+    def top_grossing_list(self):
+        log.info("Updating top grossing pairlist...")
+        tik = time.perf_counter()
+
+        self.coin_metrics['tg_dataframe'] = DataFrame()
+
+        # Build grossing volume dataframe
+        for coin_pair in self.coin_metrics['current_whitelist']:
+            coin = coin_pair.split('/')[0]
+
+            # Get the volume for the daily informative timeframe and name the column for the coin
+            pair_dataframe = self.dp.get_pair_dataframe(pair=coin_pair, timeframe=self.info_timeframe_1d)
+            pair_dataframe.set_index('date')
+
+            if self.config['runmode'].value in ('live', 'dry_run'):
+                pair_dataframe = pair_dataframe.iloc[-7:,:]
+
+            # Set the date index of the self.coin_metrics['tg_dataframe'] once
+            if not 'date' in self.coin_metrics['tg_dataframe']:
+                self.coin_metrics['tg_dataframe']['date'] = pair_dataframe['date']
+                self.coin_metrics['tg_dataframe'].set_index('date')
+
+            # Calculate daily grossing rate
+            pair_dataframe[coin] = pair_dataframe['close'].pct_change() * 100
+
+            # Drop the columns we don't need
+            pair_dataframe.drop(columns=['open', 'high', 'low', 'close', 'volume'], inplace=True)
+
+            # Merge it in on the date key
+            self.coin_metrics['tg_dataframe'] = self.coin_metrics['tg_dataframe'].merge(pair_dataframe, on='date', how='left')
+
+        # Forward fill empty cells (due to different df shapes)
+        self.coin_metrics['tg_dataframe'].fillna(0, inplace=True)
+
+        self.coin_metrics['tg_dataframe'].to_html('pct_df.html')
+
+        # Store and drop date column for value sorting
+        pair_dates = self.coin_metrics['tg_dataframe']['date']
+        self.coin_metrics['tg_dataframe'].drop(columns=['date'], inplace=True)
+
+        # Build columns and top grossing coins
+        column_names = [f"Coin #{i}" for i in range(1, self.coin_metrics['top_grossing_len'] + 1)]
+        self.coin_metrics['tg_dataframe'][column_names] = self.coin_metrics['tg_dataframe'].apply(lambda x: x.nlargest(self.coin_metrics['top_grossing_len']).index.values, axis=1, result_type='expand')
+        self.coin_metrics['tg_dataframe'].drop(columns=[col for col in self.coin_metrics['tg_dataframe'] if col not in column_names], inplace=True)
+
+        # Re-add stored date column
+        self.coin_metrics['tg_dataframe'].insert(loc = 0, column = 'date', value = pair_dates)
+        self.coin_metrics['tg_dataframe'].set_index('date')
+        self.coin_metrics['top_grossing_updated'] = True
+        log.info("Updated top grossing pairlist (tail-5):")
+        log.info(f"\n{self.coin_metrics['tg_dataframe'].tail(5)}")
+
+        tok = time.perf_counter()
+        log.info(f"Updating top grossing pairlist took {tok - tik:0.4f} seconds...")
+
+    def is_top_coin(self, coin_pair, row_data, top_length) -> bool:
+        return coin_pair.split('/')[0] in row_data.loc['Coin #1':f"Coin #{top_length}"].values
+
     def bot_loop_start(self, **kwargs) -> None:
         """
         Called at the start of the bot iteration (one loop).
@@ -2043,6 +2396,14 @@ class NostalgiaForInfinityNext(IStrategy):
         (e.g. gather some remote resource for comparison)
         :param **kwargs: Ensure to keep this here so updates to this won't break your strategy.
         """
+
+        # Coin metrics mechanism
+        if self.coin_metrics['top_traded_enabled'] or self.coin_metrics['top_grossing_enabled']:
+            self.whitelist_tracker()
+        if self.coin_metrics['top_traded_enabled'] and not self.coin_metrics['top_traded_updated']:
+            self.top_traded_list()
+        if self.coin_metrics['top_grossing_enabled'] and not self.coin_metrics['top_grossing_updated']:
+            self.top_grossing_list()
 
         if self.config["runmode"].value not in ("live", "dry_run"):
             return super().bot_loop_start(**kwargs)
@@ -2127,15 +2488,23 @@ class NostalgiaForInfinityNext(IStrategy):
                 if current_profit >= 0.20:
                     if last_candle['rsi_14'] < 30.0 and (last_candle['cmf'] < 0.0):
                         return True, 'signal_profit_o_bull_12_1'
+                    elif (last_candle['rsi_14'] < 27.0):
+                        return True, 'signal_profit_o_bull_12_9'
                 elif 0.20 > current_profit >= 0.12:
                     if last_candle['rsi_14'] < 42.0 and (last_candle['cmf'] < 0.0):
                         return True, 'signal_profit_o_bull_11_1'
+                    elif (last_candle['rsi_14'] < 39.0):
+                        return True, 'signal_profit_o_bull_11_9'
                 elif 0.12 > current_profit >= 0.1:
                     if last_candle['rsi_14'] < 46.0 and (last_candle['cmf'] < 0.0):
                         return True, 'signal_profit_o_bull_10_1'
+                    elif (last_candle['rsi_14'] < 48.0):
+                        return True, 'signal_profit_o_bull_10_9'
                 elif 0.1 > current_profit >= 0.09:
                     if last_candle['rsi_14'] < 50.0 and (last_candle['cmf'] < 0.0):
                         return True, 'signal_profit_o_bull_9_1'
+                    elif (last_candle['rsi_14'] < 49.0):
+                        return True, 'signal_profit_o_bull_9_9'
                 elif 0.09 > current_profit >= 0.08:
                     if (last_candle['rsi_14'] < 57.0) and (last_candle['cmf'] < 0.0):
                         return True, 'signal_profit_o_bull_8_1'
@@ -2143,6 +2512,8 @@ class NostalgiaForInfinityNext(IStrategy):
                         return True, 'signal_profit_o_bull_8_3'
                     elif (last_candle['rsi_14'] < 58.0) and (last_candle['r_14'] == 0.0):
                         return True, 'signal_profit_o_bull_8_4'
+                    elif (last_candle['rsi_14'] < 48.0):
+                        return True, 'signal_profit_o_bull_8_9'
                 elif 0.08 > current_profit >= 0.07:
                     if (last_candle['rsi_14'] < 51.0) and (last_candle['cmf'] < 0.0):
                         return True, 'signal_profit_o_bull_7_1'
@@ -2152,6 +2523,8 @@ class NostalgiaForInfinityNext(IStrategy):
                         return True, 'signal_profit_o_bull_7_3'
                     elif (last_candle['rsi_14'] < 55.0) and (last_candle['r_14'] == 0.0):
                         return True, 'signal_profit_o_bull_7_4'
+                    elif (last_candle['rsi_14'] < 45.0):
+                        return True, 'signal_profit_o_bull_7_9'
                 elif 0.07 > current_profit >= 0.06:
                     if (last_candle['rsi_14'] < 50.0) and (last_candle['cmf'] < 0.0):
                         return True, 'signal_profit_o_bull_6_1'
@@ -2163,6 +2536,8 @@ class NostalgiaForInfinityNext(IStrategy):
                         return True, 'signal_profit_o_bull_6_4'
                     elif (last_candle['cti'] > 0.95):
                         return True, 'signal_profit_o_bull_6_5'
+                    elif (last_candle['rsi_14'] < 42.0):
+                        return True, 'signal_profit_o_bull_6_9'
                 elif 0.06 > current_profit >= 0.05:
                     if (last_candle['rsi_14'] < 46.0) and (last_candle['cmf'] < 0.0):
                         return True, 'signal_profit_o_bull_5_1'
@@ -2176,6 +2551,8 @@ class NostalgiaForInfinityNext(IStrategy):
                         return True, 'signal_profit_o_bull_5_5'
                     elif (last_candle['rsi_14'] < 50.0) and (last_candle['sma_200_dec_20_1h']) and (last_candle['cmf'] < 0.0):
                         return True, 'signal_profit_o_bull_5_6'
+                    elif (last_candle['rsi_14'] < 41.0):
+                        return True, 'signal_profit_o_bull_5_9'
                 elif 0.05 > current_profit >= 0.04:
                     if (last_candle['rsi_14'] < 45.0) and (last_candle['cmf'] < 0.0):
                         return True, 'signal_profit_o_bull_4_1'
@@ -2187,6 +2564,8 @@ class NostalgiaForInfinityNext(IStrategy):
                         return True, 'signal_profit_o_bull_4_5'
                     elif (last_candle['rsi_14'] < 48.0) and (last_candle['sma_200_dec_20_1h']) and (last_candle['cmf'] < 0.0):
                         return True, 'signal_profit_o_bull_4_6'
+                    elif (last_candle['rsi_14'] < 40.0):
+                        return True, 'signal_profit_o_bull_4_9'
                 elif 0.04 > current_profit >= 0.03:
                     if (last_candle['rsi_14'] < 37.0) and (last_candle['cmf'] < 0.0):
                         return True, 'signal_profit_o_bull_3_1'
@@ -2198,6 +2577,8 @@ class NostalgiaForInfinityNext(IStrategy):
                         return True, 'signal_profit_o_bull_3_5'
                     elif (last_candle['rsi_14'] < 43.0) and (last_candle['sma_200_dec_20_1h']) and (last_candle['cmf'] < 0.0):
                         return True, 'signal_profit_o_bull_3_6'
+                    elif (last_candle['rsi_14'] < 35.0):
+                        return True, 'signal_profit_o_bull_3_9'
                 elif 0.03 > current_profit >= 0.02:
                     if (last_candle['rsi_14'] < 36.0) and (last_candle['cmf'] < 0.0):
                         return True, 'signal_profit_o_bull_2_1'
@@ -2213,6 +2594,8 @@ class NostalgiaForInfinityNext(IStrategy):
                         return True, 'signal_profit_o_bull_2_7'
                     elif last_candle['rsi_14'] < 40.0 and (last_candle['cmf'] < -0.25):
                         return True, 'signal_profit_o_bull_2_8'
+                    elif (last_candle['rsi_14'] < 34.0):
+                        return True, 'signal_profit_o_bull_2_9'
                 elif 0.02 > current_profit >= 0.012:
                     if (last_candle['rsi_14'] < 34.0) and (last_candle['cmf'] < 0.0):
                         return True, 'signal_profit_o_bull_1_1'
@@ -2228,21 +2611,31 @@ class NostalgiaForInfinityNext(IStrategy):
                         return True, 'signal_profit_o_bull_1_7'
                     elif last_candle['rsi_14'] < 39.0 and (last_candle['cmf'] < -0.25):
                         return True, 'signal_profit_o_bull_1_8'
+                    elif (last_candle['rsi_14'] < 32.0):
+                        return True, 'signal_profit_o_bull_1_9'
             else:
                 if current_profit >= 0.20:
                     if last_candle['rsi_14'] < 30.0 and (last_candle['cmf'] < 0.0):
                         return True, 'signal_profit_o_bear_12_1'
+                    elif (last_candle['rsi_14'] < 28.0):
+                        return True, 'signal_profit_o_bear_12_9'
                 elif 0.20 > current_profit >= 0.12:
                     if last_candle['rsi_14'] < 42.0 and (last_candle['cmf'] < 0.0):
                         return True, 'signal_profit_o_bear_11_1'
+                    elif (last_candle['rsi_14'] < 40.0):
+                        return True, 'signal_profit_o_bear_11_9'
                 elif 0.12 > current_profit >= 0.10:
                     if last_candle['rsi_14'] < 46.0 and (last_candle['cmf'] < 0.0):
                         return True, 'signal_profit_o_bear_10_1'
+                    elif (last_candle['rsi_14'] < 49.0):
+                        return True, 'signal_profit_o_bear_10_9'
                 elif 0.10 > current_profit >= 0.09:
                     if last_candle['rsi_14'] < 55.0 and (last_candle['cmf'] < 0.0):
                         return True, 'signal_profit_o_bear_9_1'
                     elif (last_candle['rsi_14'] > 75.5):
                         return True, 'signal_profit_o_bear_9_2'
+                    elif (last_candle['rsi_14'] < 50.0):
+                        return True, 'signal_profit_o_bear_9_9'
                 elif 0.09 > current_profit >= 0.08:
                     if (last_candle['rsi_14'] < 57.0) and (last_candle['cmf'] < 0.0):
                         return True, 'signal_profit_o_bear_8_1'
@@ -2252,6 +2645,8 @@ class NostalgiaForInfinityNext(IStrategy):
                         return True, 'signal_profit_o_bear_8_3'
                     elif (last_candle['rsi_14'] < 59.0) and (last_candle['r_14'] == 0.0):
                         return True, 'signal_profit_o_bear_8_4'
+                    elif (last_candle['rsi_14'] < 49.0):
+                        return True, 'signal_profit_o_bear_8_9'
                 elif 0.08 > current_profit >= 0.07:
                     if (last_candle['rsi_14'] < 52.0) and (last_candle['cmf'] < 0.0):
                         return True, 'signal_profit_o_bear_7_1'
@@ -2261,6 +2656,8 @@ class NostalgiaForInfinityNext(IStrategy):
                         return True, 'signal_profit_o_bear_7_3'
                     elif (last_candle['rsi_14'] < 57.0) and (last_candle['r_14'] == 0.0):
                         return True, 'signal_profit_o_bear_7_4'
+                    elif (last_candle['rsi_14'] < 46.0):
+                        return True, 'signal_profit_o_bear_7_9'
                 elif 0.07 > current_profit >= 0.06:
                     if (last_candle['rsi_14'] < 51.0) and (last_candle['cmf'] < 0.0):
                         return True, 'signal_profit_o_bear_6_1'
@@ -2272,6 +2669,8 @@ class NostalgiaForInfinityNext(IStrategy):
                         return True, 'signal_profit_o_bear_6_4'
                     elif (last_candle['cti'] > 0.94):
                         return True, 'signal_profit_o_bear_6_5'
+                    elif (last_candle['rsi_14'] < 43.0):
+                        return True, 'signal_profit_o_bear_6_9'
                 elif 0.06 > current_profit >= 0.05:
                     if (last_candle['rsi_14'] < 49.0) and (last_candle['cmf'] < 0.0):
                         return True, 'signal_profit_o_bear_5_1'
@@ -2283,6 +2682,8 @@ class NostalgiaForInfinityNext(IStrategy):
                         return True, 'signal_profit_o_bear_5_5'
                     elif (last_candle['rsi_14'] < 50.0) and (last_candle['sma_200_dec_20_1h']) and (last_candle['cmf'] < 0.0):
                         return True, 'signal_profit_o_bear_5_6'
+                    elif (last_candle['rsi_14'] < 42.0):
+                        return True, 'signal_profit_o_bear_5_9'
                 elif 0.05 > current_profit >= 0.04:
                     if (last_candle['rsi_14'] < 46.0) and (last_candle['cmf'] < 0.0):
                         return True, 'signal_profit_o_bear_4_1'
@@ -2294,6 +2695,8 @@ class NostalgiaForInfinityNext(IStrategy):
                         return True, 'signal_profit_o_bear_4_5'
                     elif (last_candle['rsi_14'] < 48.0) and (last_candle['sma_200_dec_20_1h']) and (last_candle['cmf'] < 0.0):
                         return True, 'signal_profit_o_bear_4_6'
+                    elif (last_candle['rsi_14'] < 41.0):
+                        return True, 'signal_profit_o_bear_4_9'
                 elif 0.04 > current_profit >= 0.03:
                     if (last_candle['rsi_14'] < 38.0) and (last_candle['cmf'] < 0.0):
                         return True, 'signal_profit_o_bear_3_1'
@@ -2305,6 +2708,8 @@ class NostalgiaForInfinityNext(IStrategy):
                         return True, 'signal_profit_o_bear_3_5'
                     elif (last_candle['rsi_14'] < 44.0) and (last_candle['sma_200_dec_20_1h']) and (last_candle['cmf'] < 0.0):
                         return True, 'signal_profit_o_bear_3_6'
+                    elif (last_candle['rsi_14'] < 36.0):
+                        return True, 'signal_profit_o_bear_3_9'
                 elif 0.03 > current_profit >= 0.02:
                     if (last_candle['rsi_14'] < 37.0) and (last_candle['cmf'] < 0.0):
                         return True, 'signal_profit_o_bear_2_1'
@@ -2318,6 +2723,8 @@ class NostalgiaForInfinityNext(IStrategy):
                         return True, 'signal_profit_o_bear_2_6'
                     elif (last_candle['rsi_14'] < 43.0) and (last_candle['cmf_1h'] < -0.05) and (last_candle['cti_1h'] > 0.85):
                         return True, 'signal_profit_o_bear_2_7'
+                    elif (last_candle['rsi_14'] < 35.0):
+                        return True, 'signal_profit_o_bear_2_9'
                 elif 0.02 > current_profit >= 0.012:
                     if (last_candle['rsi_14'] < 35.0) and (last_candle['cmf'] < 0.0):
                         return True, 'signal_profit_o_bear_1_1'
@@ -2331,6 +2738,8 @@ class NostalgiaForInfinityNext(IStrategy):
                         return True, 'signal_profit_o_bear_1_6'
                     elif (last_candle['rsi_14'] < 43.0) and (last_candle['cmf_1h'] < -0.05) and (last_candle['cti_1h'] > 0.85):
                         return True, 'signal_profit_o_bear_1_7'
+                    elif (last_candle['rsi_14'] < 33.0):
+                        return True, 'signal_profit_o_bear_1_9'
 
         return False, None
 
@@ -2340,15 +2749,23 @@ class NostalgiaForInfinityNext(IStrategy):
                 if current_profit >= 0.20:
                     if last_candle['rsi_14'] < 30.0 and (last_candle['cmf'] < 0.0):
                         return True, 'signal_profit_u_bull_12_1'
+                    elif (last_candle['rsi_14'] < 28.0):
+                        return True, 'signal_profit_u_bull_12_9'
                 elif 0.20 > current_profit >= 0.12:
                     if last_candle['rsi_14'] < 42.0 and (last_candle['cmf'] < 0.0):
                         return True, 'signal_profit_u_bull_11_1'
+                    elif (last_candle['rsi_14'] < 43.0):
+                        return True, 'signal_profit_u_bull_11_9'
                 elif 0.12 > current_profit >= 0.10:
                     if last_candle['rsi_14'] < 46.0 and (last_candle['cmf'] < 0.0):
                         return True, 'signal_profit_u_bull_10_1'
+                    elif (last_candle['rsi_14'] < 49.0):
+                        return True, 'signal_profit_u_bull_10_9'
                 elif 0.10 > current_profit >= 0.09:
                     if last_candle['rsi_14'] < 50.0 and (last_candle['cmf'] < 0.0):
                         return True, 'signal_profit_u_bull_9_1'
+                    elif (last_candle['rsi_14'] < 50.0):
+                        return True, 'signal_profit_u_bull_9_9'
                 elif 0.09 > current_profit >= 0.08:
                     if last_candle['rsi_14'] < 57.0 and (last_candle['cmf'] < 0.0):
                         return True, 'signal_profit_u_bull_8_1'
@@ -2356,6 +2773,8 @@ class NostalgiaForInfinityNext(IStrategy):
                         return True, 'signal_profit_u_bull_8_3'
                     elif (last_candle['rsi_14'] < 58.0) and (last_candle['r_14'] == 0.0):
                         return True, 'signal_profit_u_bull_8_4'
+                    elif (last_candle['rsi_14'] < 49.0):
+                        return True, 'signal_profit_u_bull_8_9'
                 elif 0.08 > current_profit >= 0.07:
                     if last_candle['rsi_14'] < 52.0 and (last_candle['cmf'] < 0.0):
                         return True, 'signal_profit_u_bull_7_1'
@@ -2365,6 +2784,8 @@ class NostalgiaForInfinityNext(IStrategy):
                         return True, 'signal_profit_u_bull_7_3'
                     elif (last_candle['rsi_14'] < 55.0) and (last_candle['r_14'] == 0.0):
                         return True, 'signal_profit_u_bull_7_4'
+                    elif (last_candle['rsi_14'] < 46.0):
+                        return True, 'signal_profit_u_bull_7_9'
                 elif 0.07 > current_profit >= 0.06:
                     if last_candle['rsi_14'] < 50.0 and (last_candle['cmf'] < 0.0):
                         return True, 'signal_profit_u_bull_6_1'
@@ -2376,6 +2797,8 @@ class NostalgiaForInfinityNext(IStrategy):
                         return True, 'signal_profit_u_bull_6_4'
                     elif (last_candle['cti'] > 0.95):
                         return True, 'signal_profit_u_bull_6_5'
+                    elif (last_candle['rsi_14'] < 43.0):
+                        return True, 'signal_profit_u_bull_6_9'
                 elif 0.06 > current_profit >= 0.05:
                     if last_candle['rsi_14'] < 48.0 and (last_candle['cmf'] < 0.0):
                         return True, 'signal_profit_u_bull_5_1'
@@ -2389,6 +2812,8 @@ class NostalgiaForInfinityNext(IStrategy):
                         return True, 'signal_profit_u_bull_5_5'
                     elif (last_candle['rsi_14'] < 51.0) and (last_candle['sma_200_dec_20_1h']) and (last_candle['cmf'] < 0.0):
                         return True, 'signal_profit_u_bull_5_6'
+                    elif (last_candle['rsi_14'] < 42.0):
+                        return True, 'signal_profit_u_bull_5_9'
                 elif 0.05 > current_profit >= 0.04:
                     if last_candle['rsi_14'] < 47.0 and (last_candle['cmf'] < 0.0):
                         return True, 'signal_profit_u_bull_4_1'
@@ -2400,6 +2825,8 @@ class NostalgiaForInfinityNext(IStrategy):
                         return True, 'signal_profit_u_bull_4_5'
                     elif (last_candle['rsi_14'] < 50.0) and (last_candle['sma_200_dec_20_1h']) and (last_candle['cmf'] < 0.0):
                         return True, 'signal_profit_u_bull_4_6'
+                    elif (last_candle['rsi_14'] < 41.0):
+                        return True, 'signal_profit_u_bull_4_9'
                 elif 0.04 > current_profit >= 0.03:
                     if last_candle['rsi_14'] < 46.0 and (last_candle['cmf'] < 0.0):
                         return True, 'signal_profit_u_bull_3_1'
@@ -2411,6 +2838,8 @@ class NostalgiaForInfinityNext(IStrategy):
                         return True, 'signal_profit_u_bull_3_5'
                     elif (last_candle['rsi_14'] < 49.0) and (last_candle['sma_200_dec_20_1h']) and (last_candle['cmf'] < 0.0):
                         return True, 'signal_profit_u_bull_3_6'
+                    elif (last_candle['rsi_14'] < 36.0):
+                        return True, 'signal_profit_u_bull_3_9'
                 elif 0.03 > current_profit >= 0.02:
                     if last_candle['rsi_14'] < 45.0 and (last_candle['cmf'] < 0.0):
                         return True, 'signal_profit_u_bull_2_1'
@@ -2426,6 +2855,8 @@ class NostalgiaForInfinityNext(IStrategy):
                         return True, 'signal_profit_u_bull_2_7'
                     elif last_candle['rsi_14'] < 41.0 and (last_candle['cmf'] < -0.25):
                         return True, 'signal_profit_u_bull_2_8'
+                    elif (last_candle['rsi_14'] < 35.0):
+                        return True, 'signal_profit_u_bull_2_9'
                 elif 0.02 > current_profit >= 0.01:
                     if (last_candle['rsi_14'] < 37.0) and (last_candle['cmf'] < 0.0):
                         return True, 'signal_profit_u_bull_1_1'
@@ -2441,6 +2872,8 @@ class NostalgiaForInfinityNext(IStrategy):
                         return True, 'signal_profit_u_bull_1_7'
                     elif last_candle['rsi_14'] < 40.0 and (last_candle['cmf'] < -0.25):
                         return True, 'signal_profit_u_bull_1_8'
+                    elif (last_candle['rsi_14'] < 33.0):
+                        return True, 'signal_profit_u_bull_1_9'
             else:
                 if current_profit >= 0.20:
                     if last_candle['rsi_14'] < 30.0:
@@ -2485,7 +2918,7 @@ class NostalgiaForInfinityNext(IStrategy):
                     elif (last_candle['cti'] > 0.942):
                         return True, 'signal_profit_u_bear_5_5'
                     elif (last_candle['rsi_14'] < 57.0) and (last_candle['sma_200_dec_20_1h']) and (last_candle['cmf'] < 0.0):
-                        return True, 'signal_profit_u_bull_5_6'
+                        return True, 'signal_profit_u_bear_5_6'
                 elif 0.05 > current_profit >= 0.04:
                     if last_candle['rsi_14'] < 50.0:
                         return True, 'signal_profit_u_bear_4_1'
@@ -2496,7 +2929,7 @@ class NostalgiaForInfinityNext(IStrategy):
                     elif (last_candle['cti'] > 0.944):
                         return True, 'signal_profit_u_bear_4_5'
                     elif (last_candle['rsi_14'] < 56.0) and (last_candle['sma_200_dec_20_1h']) and (last_candle['cmf'] < 0.0):
-                        return True, 'signal_profit_u_bull_4_6'
+                        return True, 'signal_profit_u_bear_4_6'
                 elif 0.04 > current_profit >= 0.03:
                     if last_candle['rsi_14'] < 48.0:
                         return True, 'signal_profit_u_bear_3_1'
@@ -2507,7 +2940,7 @@ class NostalgiaForInfinityNext(IStrategy):
                     elif (last_candle['cti'] > 0.946):
                         return True, 'signal_profit_u_bear_3_5'
                     elif (last_candle['rsi_14'] < 55.0) and (last_candle['sma_200_dec_20_1h']) and (last_candle['cmf'] < 0.0):
-                        return True, 'signal_profit_u_bull_3_6'
+                        return True, 'signal_profit_u_bear_3_6'
                 elif 0.03 > current_profit >= 0.02:
                     if last_candle['rsi_14'] < 55.0: #46
                         return True, 'signal_profit_u_bear_2_1'
@@ -2518,7 +2951,7 @@ class NostalgiaForInfinityNext(IStrategy):
                     elif (last_candle['cti'] > 0.948):
                         return True, 'signal_profit_u_bear_2_5'
                     elif (last_candle['rsi_14'] < 54.0) and (last_candle['sma_200_dec_20_1h']) and (last_candle['cmf'] < 0.0):
-                        return True, 'signal_profit_u_bull_2_6'
+                        return True, 'signal_profit_u_bear_2_6'
                     elif (last_candle['rsi_14'] < 54.0) and (last_candle['cmf_1h'] < -0.05) and (last_candle['cti_1h'] > 0.85):
                         return True, 'signal_profit_u_bear_2_7'
                 elif 0.02 > current_profit >= 0.01:
@@ -2531,9 +2964,12 @@ class NostalgiaForInfinityNext(IStrategy):
                     elif (last_candle['cti'] > 0.95):
                         return True, 'signal_profit_u_bear_1_5'
                     elif (last_candle['rsi_14'] < 44.0) and (last_candle['sma_200_dec_20_1h']) and (last_candle['cmf'] < 0.0):
-                        return True, 'signal_profit_u_bull_1_6'
+                        return True, 'signal_profit_u_bear_1_6'
                     elif (last_candle['rsi_14'] < 44.0) and (last_candle['cmf_1h'] < -0.05) and (last_candle['cti_1h'] > 0.85):
                         return True, 'signal_profit_u_bear_1_7'
+                    elif (last_candle['rsi_14'] < 34.0):
+                        return True, 'signal_profit_u_bear_1_9'
+
         return False, None
 
     def sell_pump_main(self, current_profit: float, last_candle) -> tuple:
@@ -2953,20 +3389,30 @@ class NostalgiaForInfinityNext(IStrategy):
 
         return False, None
 
-    def sell_stoploss(self, current_profit: float, last_candle, previous_candle_1, trade: 'Trade', current_time: 'datetime') -> tuple:
-        if (last_candle['sma_200_dec_24']) and (last_candle['ema_25'] < last_candle['ema_50']):
-            if (-0.12 <= current_profit < -0.08):
-                if (last_candle['close'] < last_candle['atr_high_thresh_1']) and (previous_candle_1['close'] > previous_candle_1['atr_high_thresh_1']):
-                    return True, 'signal_stoploss_atr_1'
-            elif (-0.16 <= current_profit < -0.12):
-                if (last_candle['close'] < last_candle['atr_high_thresh_2']) and (previous_candle_1['close'] > previous_candle_1['atr_high_thresh_2']):
-                    return True, 'signal_stoploss_atr_2'
-            elif (-0.2 <= current_profit < -0.16):
-                if (last_candle['close'] < last_candle['atr_high_thresh_3']) and (previous_candle_1['close'] > previous_candle_1['atr_high_thresh_3']):
-                    return True, 'signal_stoploss_atr_3'
-            elif (current_profit < -0.2):
-                if (last_candle['close'] < last_candle['atr_high_thresh_4']) and (previous_candle_1['close'] > previous_candle_1['atr_high_thresh_4']):
-                    return True, 'signal_stoploss_atr_4'
+    def sell_stoploss(self, current_profit: float, max_profit: float, max_loss: float, last_candle, previous_candle_1, trade: 'Trade', current_time: 'datetime') -> tuple:
+        # Under & near EMA200, local uptrend move
+        if (current_profit < -0.05) and (last_candle['close'] < last_candle['ema_200']) and (last_candle['cmf'] < 0.0) and (((last_candle['ema_200'] - last_candle['close']) / last_candle['close']) < 0.004) and last_candle['rsi_14'] > previous_candle_1['rsi_14'] and (last_candle['rsi_14'] > (last_candle['rsi_14_1h'] + 10.0)) and (last_candle['sma_200_dec_24']) and (current_time - timedelta(minutes=2880) > trade.open_date_utc):
+            return True, 'signal_stoploss_u_e_1'
+
+        # Under EMA200, local strong uptrend move
+        if (current_profit < -0.08) and (last_candle['close'] < last_candle['ema_200']) and (last_candle['cmf'] < 0.0) and last_candle['rsi_14'] > previous_candle_1['rsi_14'] and (last_candle['rsi_14'] > (last_candle['rsi_14_1h'] + 24.0)) and (last_candle['sma_200_dec_20']) and (last_candle['sma_200_dec_24']) and (current_time - timedelta(minutes=2880) > trade.open_date_utc):
+            return True, 'signal_stoploss_u_e_2'
+
+        # Under EMA200, pair negative, low max rate
+        if (-0.04 > current_profit > -0.08) and (max_profit < 0.005) and (max_loss < 0.08) and (last_candle['close'] < last_candle['ema_200']) and (last_candle['ema_25'] < last_candle['ema_50']) and (last_candle['moderi_32'] == False) and (last_candle['moderi_64'] == False) and (last_candle['moderi_96'] == False) and (last_candle['cmf'] < -0.0):
+            return True, 'signal_stoploss_u_e_3'
+
+        # Under EMA200, pair and BTC negative, low max rate
+        if (-0.05 > current_profit > -0.09) and (last_candle['btc_not_downtrend_1h'] == False) and (last_candle['moderi_32'] == False) and (last_candle['moderi_64'] == False) and (max_profit < 0.005) and (max_loss < 0.09) and (last_candle['sma_200_dec_24']) and (last_candle['cmf'] < -0.0) and (last_candle['close'] < last_candle['ema_200']) and (last_candle['ema_25'] < last_candle['ema_50']) and (last_candle['cti'] < -0.8) and (last_candle['r_480'] < -50.0):
+            return True, 'signal_stoploss_u_e_b_1'
+
+        # Under EMA200, pair and BTC negative, CTI, Elder Ray Index negative, normal max rate
+        elif (-0.1 > current_profit > -0.2) and (last_candle['btc_not_downtrend_1h'] == False) and (last_candle['moderi_32'] == False) and (last_candle['moderi_64'] == False) and (last_candle['moderi_96'] == False) and (max_profit < 0.05) and (max_loss < 0.2) and (last_candle['sma_200_dec_24']) and (last_candle['sma_200_dec_20_1h']) and (last_candle['cmf'] < -0.45) and (last_candle['close'] < last_candle['ema_200']) and (last_candle['ema_25'] < last_candle['ema_50']) and (last_candle['cti'] < -0.8) and (last_candle['r_480'] < -97.0):
+            return True, 'signal_stoploss_u_e_b_2'
+
+        # Under EMA200, pair and BTC negative, low max rate
+        if (-0.04 > current_profit > -0.07) and (last_candle['moderi_32'] == False) and (last_candle['moderi_64'] == False) and (max_profit < 0.005) and (max_loss < 0.07) and (last_candle['sma_200_dec_24']) and (last_candle['close'] < last_candle['ema_200']) and (last_candle['ema_25'] < last_candle['ema_50']) and (last_candle['cmf'] < -0.0) and (last_candle['r_480'] < -50.0) and (last_candle['btc_not_downtrend_1h'] == False):
+            return True, 'signal_stoploss_u_e_b_3'
 
         return False, None
 
@@ -3015,7 +3461,7 @@ class NostalgiaForInfinityNext(IStrategy):
         return False, None
 
     def sell_r_1(self, current_profit: float, last_candle) -> tuple:
-        if 0.02 > current_profit >= 0.01:
+        if 0.02 > current_profit >= 0.012:
             if last_candle['r_480'] > -0.4:
                 return True, 'signal_profit_w_1_1'
         elif 0.03 > current_profit >= 0.02:
@@ -3190,6 +3636,46 @@ class NostalgiaForInfinityNext(IStrategy):
 
         return False, None
 
+    def sell_r_6(self, current_profit: float, last_candle) -> tuple:
+        if (0.02 > current_profit >= 0.012):
+            if (last_candle['r_14'] > -0.1) and (last_candle['rsi_14'] > 75.0) and (last_candle['cti'] > 0.8) and (last_candle['cci'] > 200.0):
+                return True, 'signal_profit_w_6_1'
+        elif (0.03 > current_profit >= 0.02):
+            if (last_candle['r_14'] > -0.2) and (last_candle['rsi_14'] > 75.0) and (last_candle['cti'] > 0.8) and (last_candle['cci'] > 200.0):
+                return True, 'signal_profit_w_6_2'
+        elif (0.04 > current_profit >= 0.03):
+            if (last_candle['r_14'] > -0.3) and (last_candle['rsi_14'] > 75.0) and (last_candle['cti'] > 0.8) and (last_candle['cci'] > 200.0):
+                return True, 'signal_profit_w_6_3'
+        elif (0.05 > current_profit >= 0.04):
+            if (last_candle['r_14'] > -0.4) and (last_candle['rsi_14'] > 75.0) and (last_candle['cti'] > 0.8) and (last_candle['cci'] > 200.0):
+                return True, 'signal_profit_w_6_4'
+        elif (0.06 > current_profit >= 0.05):
+            if (last_candle['r_14'] > -0.5) and (last_candle['rsi_14'] > 75.0) and (last_candle['cti'] > 0.8) and (last_candle['cci'] > 200.0):
+                return True, 'signal_profit_w_6_5'
+        elif (0.07 > current_profit >= 0.06):
+            if (last_candle['r_14'] > -0.6) and (last_candle['rsi_14'] > 75.0) and (last_candle['cti'] > 0.8) and (last_candle['cci'] > 200.0):
+                return True, 'signal_profit_w_6_6'
+        elif (0.08 > current_profit >= 0.07):
+            if (last_candle['r_14'] > -1.0) and (last_candle['rsi_14'] > 75.0) and (last_candle['cti'] > 0.8) and (last_candle['cci'] > 200.0):
+                return True, 'signal_profit_w_6_7'
+        elif (0.09 > current_profit >= 0.08):
+            if (last_candle['r_14'] > -1.5) and (last_candle['rsi_14'] > 75.0) and (last_candle['cti'] > 0.8) and (last_candle['cci'] > 200.0):
+                return True, 'signal_profit_w_6_8'
+        elif (0.1 > current_profit >= 0.09):
+            if (last_candle['r_14'] > -1.0) and (last_candle['rsi_14'] > 75.0) and (last_candle['cti'] > 0.8) and (last_candle['cci'] > 200.0):
+                return True, 'signal_profit_w_6_9'
+        elif (0.12 > current_profit >= 0.1):
+            if (last_candle['r_14'] > -0.75) and (last_candle['rsi_14'] > 75.0) and (last_candle['cti'] > 0.8) and (last_candle['cci'] > 200.0):
+                return True, 'signal_profit_w_6_10'
+        elif (0.2 > current_profit >= 0.12):
+            if (last_candle['r_14'] > -0.5) and (last_candle['rsi_14'] > 75.0) and (last_candle['cti'] > 0.8) and (last_candle['cci'] > 200.0):
+                return True, 'signal_profit_w_6_11'
+        elif (current_profit >= 0.2):
+            if (last_candle['r_14'] > -0.1) and (last_candle['rsi_14'] > 75.0) and (last_candle['cti'] > 0.8) and (last_candle['cci'] > 200.0):
+                return True, 'signal_profit_w_6_12'
+
+        return False, None
+
     def mark_profit_target(self, pair: str, trade: "Trade", current_time: "datetime", current_rate: float, current_profit: float, last_candle, previous_candle_1) -> tuple:
         # if self.profit_target_1_enable:
         #     if (current_profit > 0) and (last_candle['zlema_4_lowKF'] > last_candle['lowKF']) and (previous_candle_1['zlema_4_lowKF'] < previous_candle_1['lowKF']) and (last_candle['cci'] > -100) and (last_candle['hrsi'] > 70):
@@ -3210,22 +3696,17 @@ class NostalgiaForInfinityNext(IStrategy):
         if (0.06 > current_profit > 0.02) and (last_candle['cti'] > 0.95):
             return True, 'signal_profit_q_2'
 
-        if (last_candle['close'] < last_candle['atr_high_thresh_q']) and (previous_candle_1['close'] > previous_candle_1['atr_high_thresh_q']):
-            if (0.05 > current_profit > 0.02):
-                return True, 'signal_profit_q_atr'
-            elif (current_profit < -0.08) and (last_candle['sma_200_dec_24']) and (last_candle['ema_25'] < last_candle['ema_50']) and (last_candle['sma_200_dec_24']) and (last_candle['ema_25'] < last_candle['ema_50']):
-                return True, 'signal_stoploss_q_atr'
-
         if (0.04 > current_profit > 0.02) and (last_candle['pm'] <= last_candle['pmax_thresh']) and (last_candle['close'] > last_candle['sma_21'] * 1.1):
             return True, 'signal_profit_q_pmax_bull'
         if (0.045 > current_profit > 0.005) and (last_candle['pm'] > last_candle['pmax_thresh']) and (last_candle['close'] > last_candle['sma_21'] * 1.016):
             return True, 'signal_profit_q_pmax_bear'
 
-        return False, None
-
-    def sell_uptrend_mode(self, current_profit: float, max_profit:float, last_candle, previous_candle_1) -> tuple:
-        if (current_profit < -0.05) and (last_candle['sma_200_dec_24']) and (last_candle['ema_25'] < last_candle['ema_50']):
-            return True, 'sell_up_stoploss_1'
+        if (last_candle['momdiv_sell_1h'] == True) and (current_profit > 0.02):
+            return True, 'signal_profit_q_momdiv_1h'
+        if (last_candle['momdiv_sell'] == True) and (current_profit > 0.02):
+            return True, 'signal_profit_q_momdiv'
+        if (last_candle['momdiv_coh'] == True) and (current_profit > 0.02):
+            return True, 'signal_profit_q_momdiv_coh'
 
         return False, None
 
@@ -3254,7 +3735,7 @@ class NostalgiaForInfinityNext(IStrategy):
 
     def sell_long_mode(self, current_profit: float, max_profit:float, max_loss:float, last_candle, previous_candle_1, previous_candle_2, previous_candle_3, previous_candle_4, previous_candle_5, trade: 'Trade', current_time: 'datetime', buy_tag) -> tuple:
         # Sell signal 1
-        if (last_candle['rsi_14'] > 79.0) and (last_candle['close'] > last_candle['bb20_2_upp']) and (previous_candle_1['close'] > previous_candle_1['bb20_2_upp']) and (previous_candle_2['close'] > previous_candle_2['bb20_2_upp']) and (previous_candle_3['close'] > previous_candle_3['bb20_2_upp']) and (previous_candle_4['close'] > previous_candle_4['bb20_2_upp']) and (previous_candle_5['close'] > previous_candle_5['bb20_2_upp']):
+        if (last_candle['rsi_14'] > 78.0) and (last_candle['close'] > last_candle['bb20_2_upp']) and (previous_candle_1['close'] > previous_candle_1['bb20_2_upp']) and (previous_candle_2['close'] > previous_candle_2['bb20_2_upp']) and (previous_candle_3['close'] > previous_candle_3['bb20_2_upp']) and (previous_candle_4['close'] > previous_candle_4['bb20_2_upp']) and (previous_candle_5['close'] > previous_candle_5['bb20_2_upp']):
             if (last_candle['close'] > last_candle['ema_200']):
                 if (current_profit > 0.01):
                     return True, 'sell_long_1_1_1'
@@ -3263,7 +3744,7 @@ class NostalgiaForInfinityNext(IStrategy):
                     return True, 'sell_long_1_2_1'
 
         # Sell signal 2
-        elif (last_candle['rsi_14'] > 80.0) and (last_candle['close'] > last_candle['bb20_2_upp']) and (previous_candle_1['close'] > previous_candle_1['bb20_2_upp']) and (previous_candle_2['close'] > previous_candle_2['bb20_2_upp']):
+        elif (last_candle['rsi_14'] > 79.0) and (last_candle['close'] > last_candle['bb20_2_upp']) and (previous_candle_1['close'] > previous_candle_1['bb20_2_upp']) and (previous_candle_2['close'] > previous_candle_2['bb20_2_upp']):
             if (last_candle['close'] > last_candle['ema_200']):
                 if (current_profit > 0.01):
                     return True, 'sell_long_2_1_1'
@@ -3272,7 +3753,7 @@ class NostalgiaForInfinityNext(IStrategy):
                     return True, 'sell_long_2_2_1'
 
         # Sell signal 3
-        elif (last_candle['rsi_14'] > 85.0):
+        elif (last_candle['rsi_14'] > 82.0):
             if (last_candle['close'] > last_candle['ema_200']):
                 if (current_profit > 0.01):
                     return True, 'sell_long_3_1_1'
@@ -3281,7 +3762,7 @@ class NostalgiaForInfinityNext(IStrategy):
                     return True, 'sell_long_3_2_1'
 
         # Sell signal 4
-        elif (last_candle['rsi_14'] > 80.0) and (last_candle['rsi_14_1h'] > 82.0):
+        elif (last_candle['rsi_14'] > 78.0) and (last_candle['rsi_14_1h'] > 80.0):
             if (last_candle['close'] > last_candle['ema_200']):
                 if (current_profit > 0.01):
                     return True, 'sell_long_4_1_1'
@@ -3295,7 +3776,7 @@ class NostalgiaForInfinityNext(IStrategy):
                 return True, 'sell_long_6_1'
 
         # Sell signal 7
-        elif (last_candle['rsi_14_1h'] > 83.0) and (last_candle['crossed_below_ema_12_26']):
+        elif (last_candle['rsi_14_1h'] > 82.0) and (last_candle['crossed_below_ema_12_26']):
             if (last_candle['close'] > last_candle['ema_200']):
                 if (current_profit > 0.01):
                     return True, 'sell_long_7_1_1'
@@ -3304,7 +3785,7 @@ class NostalgiaForInfinityNext(IStrategy):
                     return True, 'sell_long_7_2_1'
 
         # Sell signal 8
-        elif (last_candle['close'] > last_candle['bb20_2_upp_1h'] * 1.1):
+        elif (last_candle['close'] > last_candle['bb20_2_upp_1h'] * 1.05):
             if (last_candle['close'] > last_candle['ema_200']):
                 if (current_profit > 0.01):
                     return True, 'sell_long_8_1_1'
@@ -3314,14 +3795,82 @@ class NostalgiaForInfinityNext(IStrategy):
 
         elif (0.02 < current_profit <= 0.06) and (max_profit - current_profit > 0.04) and (last_candle['cmf'] < 0.0) and (last_candle['sma_200_dec_24']):
             return True, 'sell_long_t_1'
+        elif (0.06 < current_profit <= 0.12) and (max_profit - current_profit > 0.06) and (last_candle['cmf'] < 0.0):
+            return True, 'sell_long_t_2'
+        elif (0.12 < current_profit <= 0.24) and (max_profit - current_profit > 0.08) and (last_candle['cmf'] < 0.0):
+            return True, 'sell_long_t_3'
+        elif (0.24 < current_profit <= 0.5) and (max_profit - current_profit > 0.09) and (last_candle['cmf'] < 0.0):
+            return True, 'sell_long_t_4'
+        elif (0.5 < current_profit <= 0.9) and (max_profit - current_profit > 0.1) and (last_candle['cmf'] < 0.0):
+            return True, 'sell_long_t_5'
 
         elif (0.03 < current_profit <= 0.06) and (current_time - timedelta(minutes=720) > trade.open_date_utc) and (last_candle['r_480'] > -20.0):
             return True, 'sell_long_l_1'
 
-        elif (current_profit < -0.1) and (last_candle['close'] < last_candle['atr_high_thresh_l']) and (previous_candle_1['close'] > previous_candle_1['atr_high_thresh_l']) and (last_candle['sma_200_dec_24']) and (last_candle['ema_25'] < last_candle['ema_50']):
-                return True, 'sell_long_stoploss_1'
+        return self.sell_stoploss(current_profit, max_profit, max_loss, last_candle, previous_candle_1, trade, current_time)
 
-        return self.sell_stoploss(current_profit, last_candle, previous_candle_1, trade, current_time)
+        return False, None
+
+    def sell_pivot(self, current_profit: float, max_profit:float, max_loss:float, last_candle, previous_candle_1, trade: 'Trade', current_time: 'datetime') -> tuple:
+        if (last_candle['close'] > (last_candle['res3_1d'] * 2.2)):
+            if (0.02 > current_profit >= 0.012):
+                if (last_candle['r_14'] >= -0.0) and (last_candle['rsi_14'] > 79.0) and (last_candle['r_480'] > -3.0):
+                    return True, 'signal_profit_pv_1_1_1'
+            elif (0.03 > current_profit >= 0.02):
+                if (last_candle['r_14'] > -0.4) and (last_candle['rsi_14'] > 76.0) and (last_candle['r_480'] > -5.0):
+                    return True, 'signal_profit_pv_1_2_1'
+            elif (0.04 > current_profit >= 0.03):
+                if (last_candle['r_14'] > -0.8) and (last_candle['rsi_14'] > 74.0) and (last_candle['r_480'] > -10.0):
+                    return True, 'signal_profit_pv_1_3_1'
+            elif (0.05 > current_profit >= 0.04):
+                if (last_candle['r_14'] > -1.0) and (last_candle['rsi_14'] > 70.0) and (last_candle['r_480'] > -15.0):
+                    return True, 'signal_profit_pv_1_4_1'
+            elif (0.06 > current_profit >= 0.05):
+                if (last_candle['r_14'] > -1.2) and (last_candle['rsi_14'] > 66.0) and (last_candle['r_480'] > -20.0):
+                    return True, 'signal_profit_pv_1_5_1'
+            elif (0.07 > current_profit >= 0.06):
+                if (last_candle['r_14'] > -1.6) and (last_candle['rsi_14'] > 60.0) and (last_candle['r_480'] > -25.0):
+                    return True, 'signal_profit_pv_1_6_1'
+            elif (0.08 > current_profit >= 0.07):
+                if (last_candle['r_14'] > -2.0) and (last_candle['rsi_14'] > 56.0) and (last_candle['r_480'] > -30.0):
+                    return True, 'signal_profit_pv_1_7_1'
+
+        elif (last_candle['close'] > (last_candle['res3_1d'] * 1.3)):
+            if (0.02 > current_profit >= 0.012):
+                if (last_candle['rsi_14'] > 80.0) and (last_candle['cti_1h'] > 0.84) and (last_candle['cmf'] < 0.0) and (last_candle['cci'] > 200.0):
+                    return True, 'signal_profit_pv_2_1_1'
+                elif (last_candle['rsi_14'] > 79.0) and (last_candle['r_14'] > -1.0) and (last_candle['cti'] > 0.9):
+                    return True, 'signal_profit_pv_2_1_2'
+            elif (0.03 > current_profit >= 0.02):
+                if (last_candle['rsi_14'] > 78.0) and (last_candle['cti_1h'] > 0.84) and (last_candle['cmf'] < 0.0) and (last_candle['cci'] > 200.0):
+                    return True, 'signal_profit_pv_2_2_1'
+                elif (last_candle['rsi_14'] > 77.0) and (last_candle['r_14'] > -3.0) and (last_candle['cti'] > 0.9):
+                    return True, 'signal_profit_pv_2_2_2'
+            elif (0.04 > current_profit >= 0.03):
+                if (last_candle['rsi_14'] > 76.0) and (last_candle['cti_1h'] > 0.84) and (last_candle['cmf'] < 0.0) and (last_candle['cci'] > 200.0):
+                    return True, 'signal_profit_pv_2_3_1'
+                elif (last_candle['rsi_14'] > 75.0) and (last_candle['r_14'] > -5.0) and (last_candle['cti'] > 0.9):
+                    return True, 'signal_profit_pv_2_3_2'
+            elif (0.05 > current_profit >= 0.04):
+                if (last_candle['rsi_14'] > 72.0) and (last_candle['cti_1h'] > 0.84) and (last_candle['cmf'] < 0.0) and (last_candle['cci'] > 200.0):
+                    return True, 'signal_profit_pv_2_4_1'
+                elif (last_candle['rsi_14'] > 71.0) and (last_candle['r_14'] > -7.0) and (last_candle['cti'] > 0.9):
+                    return True, 'signal_profit_pv_2_4_2'
+            elif (0.06 > current_profit >= 0.05):
+                if (last_candle['rsi_14'] > 68.0) and (last_candle['cti_1h'] > 0.84) and (last_candle['cmf'] < 0.0) and (last_candle['cci'] > 200.0):
+                    return True, 'signal_profit_pv_2_5_1'
+                elif (last_candle['rsi_14'] > 67.0) and (last_candle['r_14'] > -9.0) and (last_candle['cti'] > 0.9):
+                    return True, 'signal_profit_pv_2_5_2'
+            elif (0.07 > current_profit >= 0.06):
+                if (last_candle['rsi_14'] > 60.0) and (last_candle['cti_1h'] > 0.84) and (last_candle['cmf'] < 0.0) and (last_candle['cci'] > 200.0):
+                    return True, 'signal_profit_pv_2_6_1'
+                elif (last_candle['rsi_14'] > 59.0) and (last_candle['r_14'] > -9.0) and (last_candle['cti'] > 0.9):
+                    return True, 'signal_profit_pv_2_6_2'
+            elif (0.08 > current_profit >= 0.07):
+                if (last_candle['rsi_14'] > 58.0) and (last_candle['cti_1h'] > 0.84) and (last_candle['cmf'] < 0.0) and (last_candle['cci'] > 200.0):
+                    return True, 'signal_profit_pv_2_7_1'
+                elif (last_candle['rsi_14'] > 57.0) and (last_candle['r_14'] > -9.0) and (last_candle['cti'] > 0.9):
+                    return True, 'signal_profit_pv_2_7_2'
 
         return False, None
 
@@ -3352,112 +3901,118 @@ class NostalgiaForInfinityNext(IStrategy):
         if all(c in ['45', '46', '47'] for c in buy_tags):
             sell, signal_name = self.sell_long_mode(current_profit, max_profit, max_loss, last_candle, previous_candle_1, previous_candle_2, previous_candle_3, previous_candle_4, previous_candle_5, trade, current_time, buy_tag)
             if sell and (signal_name is not None):
-                return f"{signal_name} ( {buy_tag} )"
+                return f"{signal_name} ( {buy_tag})"
             # Skip remaining sell logic for long mode
             return None
 
         # Quick sell mode
-        if all(c in ['32', '33', '34', '35', '36', '37', '38', '39', '40'] for c in buy_tags):
+        if all(c in ['empty', '32', '33', '34', '35', '36', '37', '38', '40'] for c in buy_tags):
             sell, signal_name = self.sell_quick_mode(current_profit, max_profit, last_candle, previous_candle_1)
             if sell and (signal_name is not None):
-                return f"{signal_name} ( {buy_tag} )"
-
-        # Uptrend sell mode
-        if all(c in ['48'] for c in buy_tags):
-            sell, signal_name = self.sell_uptrend_mode(current_profit, max_profit, last_candle, previous_candle_1)
-            if sell and (signal_name is not None):
-                return f"{signal_name} ( {buy_tag} )"
+                return f"{signal_name} ( {buy_tag})"
 
         # Ichi Trade management
         if all(c in ['39'] for c in buy_tags):
             sell, signal_name = self.sell_ichi(current_profit, max_profit, max_loss, last_candle, previous_candle_1, trade, current_time)
             if sell and (signal_name is not None):
-                return f"{signal_name} ( {buy_tag} )"
+                return f"{signal_name} ( {buy_tag})"
 
         # Over EMA200, main profit targets
         sell, signal_name = self.sell_over_main(current_profit, last_candle)
         if sell and (signal_name is not None):
-            return f"{signal_name} ( {buy_tag} )"
+            return f"{signal_name} ( {buy_tag})"
 
         # Under EMA200, main profit targets
         sell, signal_name = self.sell_under_main(current_profit, last_candle)
         if sell and (signal_name is not None):
-            return f"{signal_name} ( {buy_tag} )"
+            return f"{signal_name} ( {buy_tag})"
 
         # The pair is pumped
         sell, signal_name = self.sell_pump_main(current_profit, last_candle)
         if sell and (signal_name is not None):
-            return f"{signal_name} ( {buy_tag} )"
+            return f"{signal_name} ( {buy_tag})"
 
         # The pair is descending
         sell, signal_name = self.sell_dec_main(current_profit, last_candle)
         if sell and (signal_name is not None):
-            return f"{signal_name} ( {buy_tag} )"
+            return f"{signal_name} ( {buy_tag})"
 
         # Trailing
         sell, signal_name = self.sell_trail_main(current_profit, last_candle, max_profit)
         if sell and (signal_name is not None):
-            return f"{signal_name} ( {buy_tag} )"
+            return f"{signal_name} ( {buy_tag})"
 
         # Duration based
         sell, signal_name = self.sell_duration_main(current_profit, last_candle, trade, current_time)
         if sell and (signal_name is not None):
-            return f"{signal_name} ( {buy_tag} )"
+            return f"{signal_name} ( {buy_tag})"
 
         # Under EMA200, exit with any profit
         sell, signal_name = self.sell_under_min(current_profit, last_candle)
         if sell and (signal_name is not None):
-            return f"{signal_name} ( {buy_tag} )"
+            return f"{signal_name} ( {buy_tag})"
 
         # Stoplosses
-        sell, signal_name = self.sell_stoploss(current_profit, last_candle, previous_candle_1, trade, current_time)
-        if sell and (signal_name is not None):
-            return f"{signal_name} ( {buy_tag} )"
+        if any(c in ['empty', '1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '11', '12', '13', '14', '15', '16', '17', '18', '19', '20', '21', '22', '23', '24', '25', '26', '27', '28', '29', '30', '31', '32', '33', '34', '35', '36', '37', '38', '39','40', '41', '42', '43', '44', '45', '46', '47', '48'] for c in buy_tags):
+            sell, signal_name = self.sell_stoploss(current_profit, max_profit, max_loss, last_candle, previous_candle_1, trade, current_time)
+            if sell and (signal_name is not None):
+                return f"{signal_name} ( {buy_tag})"
 
         # Stoplosses_doom
         sell, signal_name = self.sell_stoploss_doom(current_profit, last_candle, previous_candle_1, trade, current_time)
         if sell and (signal_name is not None):
             return f"{signal_name} ( {buy_tag} )"
 
+
         # Pumped descending pairs
         sell, signal_name = self.sell_pump_dec(current_profit, last_candle)
         if sell and (signal_name is not None):
-            return f"{signal_name} ( {buy_tag} )"
+            return f"{signal_name} ( {buy_tag})"
 
         # Extra sells for pumped pairs
         sell, signal_name = self.sell_pump_extra(current_profit, last_candle, max_profit)
         if sell and (signal_name is not None):
-            return f"{signal_name} ( {buy_tag} )"
+            return f"{signal_name} ( {buy_tag})"
 
         # Extra sells for trades that recovered
         sell, signal_name = self.sell_recover(current_profit, last_candle, max_loss)
         if sell and (signal_name is not None):
-            return f"{signal_name} ( {buy_tag} )"
+            return f"{signal_name} ( {buy_tag})"
 
         # Williams %R based sell 1
         sell, signal_name = self.sell_r_1(current_profit, last_candle)
         if sell and (signal_name is not None):
-            return f"{signal_name} ( {buy_tag} )"
+            return f"{signal_name} ( {buy_tag})"
 
         # Williams %R based sell 2
         sell, signal_name = self.sell_r_2(current_profit, last_candle)
         if sell and (signal_name is not None):
-            return f"{signal_name} ( {buy_tag} )"
+            return f"{signal_name} ( {buy_tag})"
 
         # Williams %R based sell 3
         sell, signal_name = self.sell_r_3(current_profit, last_candle)
         if sell and (signal_name is not None):
-            return f"{signal_name} ( {buy_tag} )"
+            return f"{signal_name} ( {buy_tag})"
 
         # Williams %R based sell 4, plus CTI
         sell, signal_name = self.sell_r_4(current_profit, last_candle)
         if (sell) and (signal_name is not None):
-            return f"{signal_name} ( {buy_tag} )"
+            return f"{signal_name} ( {buy_tag})"
 
         # Williams %R based sell 5, plus  RSI and CTI 1h
         sell, signal_name = self.sell_r_5(current_profit, last_candle)
         if sell and (signal_name is not None):
-            return f"{signal_name} ( {buy_tag} )"
+            return f"{signal_name} ( {buy_tag})"
+
+        # Williams %R based sell 6, plus  RSI, CTI, CCI
+        sell, signal_name = self.sell_r_6(current_profit, last_candle)
+        if sell and (signal_name is not None):
+            return f"{signal_name} ( {buy_tag})"
+
+        # Pivot points based sells
+        sell, signal_name = self.sell_pivot(current_profit, max_profit, max_loss, last_candle, previous_candle_1, trade, current_time)
+        if sell and (signal_name is not None):
+            return f"{signal_name} ( {buy_tag})"
 
         # Profit Target Signal
         # Check if pair exist on target_profit_cache
@@ -3468,7 +4023,7 @@ class NostalgiaForInfinityNext(IStrategy):
 
             sell, signal_name = self.sell_profit_target(pair, trade, current_time, current_rate, current_profit, last_candle, previous_candle_1, previous_rate, previous_sell_reason, previous_time_profit_reached)
             if sell and signal_name is not None:
-                return f"{signal_name} ( {buy_tag} )"
+                return f"{signal_name} ( {buy_tag})"
 
         pair, mark_signal = self.mark_profit_target(pair, trade, current_time, current_rate, current_profit, last_candle, previous_candle_1)
         if pair:
@@ -3478,74 +4033,74 @@ class NostalgiaForInfinityNext(IStrategy):
         if self.sell_condition_1_enable and (last_candle['rsi_14'] > self.sell_rsi_bb_1) and (last_candle['close'] > last_candle['bb20_2_upp']) and (previous_candle_1['close'] > previous_candle_1['bb20_2_upp']) and (previous_candle_2['close'] > previous_candle_2['bb20_2_upp']) and (previous_candle_3['close'] > previous_candle_3['bb20_2_upp']) and (previous_candle_4['close'] > previous_candle_4['bb20_2_upp']) and (previous_candle_5['close'] > previous_candle_5['bb20_2_upp']):
             if (last_candle['close'] > last_candle['ema_200']):
                 if (current_profit > 0.01):
-                    return f"sell_signal_1_1_1 ( {buy_tag} )"
+                    return f"sell_signal_1_1_1 ( {buy_tag})"
             else:
                 if (current_profit > 0.01):
-                    return f"sell_signal_1_2_1 ( {buy_tag} )"
-                elif (max_loss > 0.25):
-                    return f"sell_signal_1_2_2 ( {buy_tag} )"
+                    return f"sell_signal_1_2_1 ( {buy_tag})"
+                elif (max_loss > 0.5):
+                    return f"sell_signal_1_2_2 ( {buy_tag})"
 
         # Sell signal 2
         elif (self.sell_condition_2_enable) and (last_candle['rsi_14'] > self.sell_rsi_bb_2) and (last_candle['close'] > last_candle['bb20_2_upp']) and (previous_candle_1['close'] > previous_candle_1['bb20_2_upp']) and (previous_candle_2['close'] > previous_candle_2['bb20_2_upp']):
             if (last_candle['close'] > last_candle['ema_200']):
                 if (current_profit > 0.01):
-                    return f"sell_signal_2_1_1 ( {buy_tag} )"
+                    return f"sell_signal_2_1_1 ( {buy_tag})"
             else:
                 if (current_profit > 0.01):
-                    return f"sell_signal_2_2_1 ( {buy_tag} )"
-                elif (max_loss > 0.25):
-                    return f"sell_signal_2_2_2 ( {buy_tag} )"
+                    return f"sell_signal_2_2_1 ( {buy_tag})"
+                elif (max_loss > 0.5):
+                    return f"sell_signal_2_2_2 ( {buy_tag})"
 
         # Sell signal 3
         elif (self.sell_condition_3_enable) and (last_candle['rsi_14'] > self.sell_rsi_main_3):
             if (last_candle['close'] > last_candle['ema_200']):
                 if (current_profit > 0.01):
-                    return f"sell_signal_3_1_1 ( {buy_tag} )"
+                    return f"sell_signal_3_1_1 ( {buy_tag})"
             else:
                 if (current_profit > 0.01):
-                    return f"sell_signal_3_2_1 ( {buy_tag} )"
-                elif (max_loss > 0.25):
-                    return f"sell_signal_3_2_2 ( {buy_tag} )"
+                    return f"sell_signal_3_2_1 ( {buy_tag})"
+                elif (max_loss > 0.5):
+                    return f"sell_signal_3_2_2 ( {buy_tag})"
 
         # Sell signal 4
         elif self.sell_condition_4_enable and (last_candle['rsi_14'] > self.sell_dual_rsi_rsi_4) and (last_candle['rsi_14_1h'] > self.sell_dual_rsi_rsi_1h_4):
             if (last_candle['close'] > last_candle['ema_200']):
                 if (current_profit > 0.01):
-                    return f"sell_signal_4_1_1 ( {buy_tag} )"
+                    return f"sell_signal_4_1_1 ( {buy_tag})"
             else:
                 if (current_profit > 0.01):
-                    return f"sell_signal_4_2_1 ( {buy_tag} )"
-                elif (max_loss > 0.25):
-                    return f"sell_signal_4_2_2 ( {buy_tag} )"
+                    return f"sell_signal_4_2_1 ( {buy_tag})"
+                elif (max_loss > 0.5):
+                    return f"sell_signal_4_2_2 ( {buy_tag})"
 
         # Sell signal 6
         elif self.sell_condition_6_enable and (last_candle['close'] < last_candle['ema_200']) and (last_candle['close'] > last_candle['ema_50']) and (last_candle['rsi_14'] > self.sell_rsi_under_6):
             if (current_profit > 0.01):
-                return f"sell_signal_6_1 ( {buy_tag} )"
-            elif (max_loss > 0.25):
-                return f"sell_signal_6_2 ( {buy_tag} )"
+                return f"sell_signal_6_1 ( {buy_tag})"
+            elif (max_loss > 0.5):
+                return f"sell_signal_6_2 ( {buy_tag})"
 
         # Sell signal 7
         elif self.sell_condition_7_enable and (last_candle['rsi_14_1h'] > self.sell_rsi_1h_7) and (last_candle['crossed_below_ema_12_26']):
             if (last_candle['close'] > last_candle['ema_200']):
                 if (current_profit > 0.01):
-                    return f"sell_signal_7_1_1 ( {buy_tag} )"
+                    return f"sell_signal_7_1_1 ( {buy_tag})"
             else:
                 if (current_profit > 0.01):
-                    return f"sell_signal_7_2_1 ( {buy_tag} )"
-                elif (max_loss > 0.25):
-                    return f"sell_signal_7_2_2 ( {buy_tag} )"
+                    return f"sell_signal_7_2_1 ( {buy_tag})"
+                elif (max_loss > 0.5):
+                    return f"sell_signal_7_2_2 ( {buy_tag})"
 
         # Sell signal 8
         elif self.sell_condition_8_enable and (last_candle['close'] > last_candle['bb20_2_upp_1h'] * self.sell_bb_relative_8):
             if (last_candle['close'] > last_candle['ema_200']):
                 if (current_profit > 0.01):
-                    return f"sell_signal_8_1_1 ( {buy_tag} )"
+                    return f"sell_signal_8_1_1 ( {buy_tag})"
             else:
                 if (current_profit > 0.01):
-                    return f"sell_signal_8_2_1 ( {buy_tag} )"
-                elif (max_loss > 0.25):
-                    return f"sell_signal_8_2_2 ( {buy_tag} )"
+                    return f"sell_signal_8_2_1 ( {buy_tag})"
+                elif (max_loss > 0.5):
+                    return f"sell_signal_8_2_2 ( {buy_tag})"
 
         return None
 
@@ -3634,21 +4189,54 @@ class NostalgiaForInfinityNext(IStrategy):
         # get access to all pairs available in whitelist.
         pairs = self.dp.current_whitelist()
         # Assign tf to each pair so they can be downloaded and cached for strategy.
-        informative_pairs = [(pair, self.info_timeframe) for pair in pairs]
+        informative_pairs = [(pair, self.info_timeframe_1h) for pair in pairs]
+        informative_pairs.extend([(pair, self.info_timeframe_1d) for pair in pairs])
+
         if self.config['stake_currency'] in ['USDT','BUSD','USDC','DAI','TUSD','PAX','USD','EUR','GBP']:
             btc_info_pair = f"BTC/{self.config['stake_currency']}"
         else:
             btc_info_pair = "BTC/USDT"
 
         informative_pairs.append((btc_info_pair, self.timeframe))
-        informative_pairs.append((btc_info_pair, self.info_timeframe))
-        informative_pairs.append((btc_info_pair, '1d'))
+        informative_pairs.append((btc_info_pair, self.info_timeframe_1h))
+        informative_pairs.append((btc_info_pair, self.info_timeframe_1d))
         return informative_pairs
 
-    def informative_1h_indicators(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
+    def informative_1d_indicators(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
+        tik = time.perf_counter()
         assert self.dp, "DataProvider is required for multiple timeframes."
         # Get the informative pair
-        informative_1h = self.dp.get_pair_dataframe(pair=metadata['pair'], timeframe=self.info_timeframe)
+        informative_1d = self.dp.get_pair_dataframe(pair=metadata['pair'], timeframe=self.info_timeframe_1d)
+
+        # Top traded coins
+        if self.coin_metrics['top_traded_enabled']:
+            informative_1d = informative_1d.merge(self.coin_metrics['tt_dataframe'], on='date', how='left')
+            informative_1d['is_top_traded'] = informative_1d.apply(lambda row: self.is_top_coin(metadata['pair'], row, self.coin_metrics['top_traded_len']), axis=1)
+            column_names = [f"Coin #{i}" for i in range(1, self.coin_metrics['top_traded_len'] + 1)]
+            informative_1d.drop(columns = column_names, inplace=True)
+        # Top grossing coins
+        if self.coin_metrics['top_grossing_enabled']:
+            informative_1d = informative_1d.merge(self.coin_metrics['tg_dataframe'], on='date', how='left')
+            informative_1d['is_top_grossing'] = informative_1d.apply(lambda row: self.is_top_coin(metadata['pair'], row, self.coin_metrics['top_grossing_len']), axis=1)
+            column_names = [f"Coin #{i}" for i in range(1, self.coin_metrics['top_grossing_len'] + 1)]
+            informative_1d.drop(columns = column_names, inplace=True)
+
+        # Pivots
+        informative_1d['pivot'], informative_1d['res1'], informative_1d['res2'], informative_1d['res3'], informative_1d['sup1'], informative_1d['sup2'], informative_1d['sup3'] = pivot_points(informative_1d, mode='fibonacci')
+
+        # Smoothed Heikin-Ashi
+        informative_1d['open_sha'], informative_1d['close_sha'], informative_1d['low_sha'] = HeikinAshi(informative_1d, smooth_inputs=True, smooth_outputs=False, length=10)
+
+        tok = time.perf_counter()
+        log.debug(f"[{metadata['pair']}] informative_1d_indicators took: {tok - tik:0.4f} seconds.")
+
+        return informative_1d
+
+    def informative_1h_indicators(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
+        tik = time.perf_counter()
+        assert self.dp, "DataProvider is required for multiple timeframes."
+        # Get the informative pair
+        informative_1h = self.dp.get_pair_dataframe(pair=metadata['pair'], timeframe=self.info_timeframe_1h)
 
         # EMA
         informative_1h['ema_12'] = ta.EMA(informative_1h, timeperiod=12)
@@ -3669,7 +4257,7 @@ class NostalgiaForInfinityNext(IStrategy):
         informative_1h['rsi_14'] = ta.RSI(informative_1h, timeperiod=14)
 
         # EWO
-        informative_1h['ewo'] = ewo(informative_1h, 50, 200)
+        informative_1h['ewo_sma'] = ewo_sma(informative_1h, 50, 200)
 
         # BB
         bollinger = qtpylib.bollinger_bands(qtpylib.typical_price(informative_1h), window=20, stds=2)
@@ -3707,6 +4295,13 @@ class NostalgiaForInfinityNext(IStrategy):
         ssl_down, ssl_up = SSLChannels(informative_1h, 10)
         informative_1h['ssl_down'] = ssl_down
         informative_1h['ssl_up'] = ssl_up
+
+        # MOMDIV
+        mom = momdiv(informative_1h)
+        informative_1h['momdiv_buy'] = mom['momdiv_buy']
+        informative_1h['momdiv_sell'] = mom['momdiv_sell']
+        informative_1h['momdiv_coh'] = mom['momdiv_coh']
+        informative_1h['momdiv_col'] = mom['momdiv_col']
 
         # Pump protections
         informative_1h['hl_pct_change_48'] = self.range_percent_change(informative_1h, 'HL', 48)
@@ -3768,13 +4363,6 @@ class NostalgiaForInfinityNext(IStrategy):
         informative_1h['safe_pump_36_120'] = self.safe_pump(informative_1h, 36, self.buy_pump_threshold_120_36, self.buy_pump_pull_threshold_120_36)
         informative_1h['safe_pump_48_120'] = self.safe_pump(informative_1h, 48, self.buy_pump_threshold_120_48, self.buy_pump_pull_threshold_120_48)
 
-        informative_1h['safe_dump_10'] = ((informative_1h['hl_pct_change_5'] < self.buy_dump_protection_10_5) | (informative_1h['close'] < informative_1h['low_5']) | (informative_1h['close'] > informative_1h['open']))
-        informative_1h['safe_dump_20'] = ((informative_1h['hl_pct_change_5'] < self.buy_dump_protection_20_5) | (informative_1h['close'] < informative_1h['low_5']) | (informative_1h['close'] > informative_1h['open']))
-        informative_1h['safe_dump_30'] = ((informative_1h['hl_pct_change_5'] < self.buy_dump_protection_30_5) | (informative_1h['close'] < informative_1h['low_5']) | (informative_1h['close'] > informative_1h['open']))
-        informative_1h['safe_dump_40'] = ((informative_1h['hl_pct_change_5'] < self.buy_dump_protection_40_5) | (informative_1h['close'] < informative_1h['low_5']) | (informative_1h['close'] > informative_1h['open']))
-        informative_1h['safe_dump_50'] = ((informative_1h['hl_pct_change_5'] < self.buy_dump_protection_50_5) | (informative_1h['close'] < informative_1h['low_5']) | (informative_1h['close'] > informative_1h['open']))
-        informative_1h['safe_dump_60'] = ((informative_1h['hl_pct_change_5'] < self.buy_dump_protection_60_5) | (informative_1h['close'] < informative_1h['low_5']) | (informative_1h['close'] > informative_1h['open']))
-
         informative_1h['sell_pump_48_1'] = (informative_1h['hl_pct_change_48'] > self.sell_pump_threshold_48_1)
         informative_1h['sell_pump_48_2'] = (informative_1h['hl_pct_change_48'] > self.sell_pump_threshold_48_2)
         informative_1h['sell_pump_48_3'] = (informative_1h['hl_pct_change_48'] > self.sell_pump_threshold_48_3)
@@ -3787,9 +4375,13 @@ class NostalgiaForInfinityNext(IStrategy):
         informative_1h['sell_pump_24_2'] = (informative_1h['hl_pct_change_24'] > self.sell_pump_threshold_24_2)
         informative_1h['sell_pump_24_3'] = (informative_1h['hl_pct_change_24'] > self.sell_pump_threshold_24_3)
 
+        tok = time.perf_counter()
+        log.debug(f"[{metadata['pair']}] informative_1h_indicators took: {tok - tik:0.4f} seconds.")
+
         return informative_1h
 
     def normal_tf_indicators(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
+        tik = time.perf_counter()
         # BB 40 - STD2
         bb_40_std2 = qtpylib.bollinger_bands(dataframe['close'], window=40, stds=2)
         dataframe['bb40_2_low'] = bb_40_std2['lower']
@@ -3834,7 +4426,7 @@ class NostalgiaForInfinityNext(IStrategy):
         dataframe['cmf'] = chaikin_money_flow(dataframe, 20)
 
         # EWO
-        dataframe['ewo'] = ewo(dataframe, 50, 200)
+        dataframe['ewo_sma'] = ewo_sma(dataframe, 50, 200)
 
         # RSI
         dataframe['rsi_4'] = ta.RSI(dataframe, timeperiod=4)
@@ -3894,41 +4486,27 @@ class NostalgiaForInfinityNext(IStrategy):
         # HLC3
         dataframe['hlc3'] = (dataframe['high'] + dataframe['low'] + dataframe['close']) / 3
 
-        # ZLEMA
-        dataframe['zlema_2'] = pta.zlma(dataframe['hlc3'], length = 2)
-        dataframe['zlema_4'] = pta.zlma(dataframe['hlc3'], length = 4)
-
         # CCI
         dataframe['cci'] = ta.CCI(dataframe, source='hlc3', timeperiod=20)
 
-        # ATR
-        dataframe['atr'] = ta.ATR(dataframe, timeperiod=14)
-        dataframe['atr_high_thresh_1'] = (dataframe['high'] - (dataframe['atr'] * 5.4))
-        dataframe['atr_high_thresh_2'] = (dataframe['high'] - (dataframe['atr'] * 5.2))
-        dataframe['atr_high_thresh_3'] = (dataframe['high'] - (dataframe['atr'] * 5.0))
-        dataframe['atr_high_thresh_4'] = (dataframe['high'] - (dataframe['atr'] * 2.0))
-        dataframe['atr_high_thresh_q'] = (dataframe['high'] - (dataframe['atr'] * 3.0))
-        dataframe['atr_high_thresh_l'] = (dataframe['high'] - (dataframe['atr'] * 3.0))
+        # CCI Oscillator
+        cci_36 = ta.CCI(dataframe, timeperiod=36)
+        cci_36_max = cci_36.rolling(self.startup_candle_count).max()
+        cci_36_min = cci_36.rolling(self.startup_candle_count).min()
+        dataframe['cci_36_osc'] = (cci_36 / cci_36_max).where(cci_36 > 0, -cci_36 / cci_36_min)
+
+        # MOMDIV
+        mom = momdiv(dataframe)
+        dataframe['momdiv_buy'] = mom['momdiv_buy']
+        dataframe['momdiv_sell'] = mom['momdiv_sell']
+        dataframe['momdiv_coh'] = mom['momdiv_coh']
+        dataframe['momdiv_col'] = mom['momdiv_col']
 
         # Dip protection
         dataframe['tpct_change_0']   = self.top_percent_change(dataframe,0)
         dataframe['tpct_change_2']   = self.top_percent_change(dataframe,2)
         dataframe['tpct_change_12']  = self.top_percent_change(dataframe,12)
         dataframe['tpct_change_144'] = self.top_percent_change(dataframe,144)
-
-        dataframe['safe_dips_10']  = self.safe_dips(dataframe, self.buy_dip_threshold_10_1, self.buy_dip_threshold_10_2, self.buy_dip_threshold_10_3, self.buy_dip_threshold_10_4)
-        dataframe['safe_dips_20']  = self.safe_dips(dataframe, self.buy_dip_threshold_20_1, self.buy_dip_threshold_20_2, self.buy_dip_threshold_20_3, self.buy_dip_threshold_20_4)
-        dataframe['safe_dips_30']  = self.safe_dips(dataframe, self.buy_dip_threshold_30_1, self.buy_dip_threshold_30_2, self.buy_dip_threshold_30_3, self.buy_dip_threshold_30_4)
-        dataframe['safe_dips_40']  = self.safe_dips(dataframe, self.buy_dip_threshold_40_1, self.buy_dip_threshold_40_2, self.buy_dip_threshold_40_3, self.buy_dip_threshold_40_4)
-        dataframe['safe_dips_50']  = self.safe_dips(dataframe, self.buy_dip_threshold_50_1, self.buy_dip_threshold_50_2, self.buy_dip_threshold_50_3, self.buy_dip_threshold_50_4)
-        dataframe['safe_dips_60']  = self.safe_dips(dataframe, self.buy_dip_threshold_60_1, self.buy_dip_threshold_60_2, self.buy_dip_threshold_60_3, self.buy_dip_threshold_60_4)
-        dataframe['safe_dips_70']  = self.safe_dips(dataframe, self.buy_dip_threshold_70_1, self.buy_dip_threshold_70_2, self.buy_dip_threshold_70_3, self.buy_dip_threshold_70_4)
-        dataframe['safe_dips_80']  = self.safe_dips(dataframe, self.buy_dip_threshold_80_1, self.buy_dip_threshold_80_2, self.buy_dip_threshold_80_3, self.buy_dip_threshold_80_4)
-        dataframe['safe_dips_90']  = self.safe_dips(dataframe, self.buy_dip_threshold_90_1, self.buy_dip_threshold_90_2, self.buy_dip_threshold_90_3, self.buy_dip_threshold_90_4)
-        dataframe['safe_dips_100'] = self.safe_dips(dataframe, self.buy_dip_threshold_100_1, self.buy_dip_threshold_100_2, self.buy_dip_threshold_100_3, self.buy_dip_threshold_100_4)
-        dataframe['safe_dips_110'] = self.safe_dips(dataframe, self.buy_dip_threshold_110_1, self.buy_dip_threshold_110_2, self.buy_dip_threshold_110_3, self.buy_dip_threshold_110_4)
-        dataframe['safe_dips_120'] = self.safe_dips(dataframe, self.buy_dip_threshold_120_1, self.buy_dip_threshold_120_2, self.buy_dip_threshold_120_3, self.buy_dip_threshold_120_4)
-        dataframe['safe_dips_130'] = self.safe_dips(dataframe, self.buy_dip_threshold_130_1, self.buy_dip_threshold_130_2, self.buy_dip_threshold_130_3, self.buy_dip_threshold_130_4)
 
         # Volume
         dataframe['volume_mean_4'] = dataframe['volume'].rolling(4).mean().shift(1)
@@ -3942,6 +4520,9 @@ class NostalgiaForInfinityNext(IStrategy):
             # Exchange downtime protection
             dataframe['live_data_ok'] = (dataframe['volume'].rolling(window=72, min_periods=72).min() > 0)
 
+        tok = time.perf_counter()
+        log.debug(f"[{metadata['pair']}] normal_tf_indicators took: {tok - tik:0.4f} seconds.")
+
         return dataframe
 
     def resampled_tf_indicators(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
@@ -3952,6 +4533,7 @@ class NostalgiaForInfinityNext(IStrategy):
         return dataframe
 
     def base_tf_btc_indicators(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
+        tik = time.perf_counter()
         # Indicators
         # -----------------------------------------------------------------------------------------
         dataframe['rsi_14'] = ta.RSI(dataframe, timeperiod=14)
@@ -3960,10 +4542,14 @@ class NostalgiaForInfinityNext(IStrategy):
         # -----------------------------------------------------------------------------------------
         ignore_columns = ['date', 'open', 'high', 'low', 'close', 'volume']
         dataframe.rename(columns=lambda s: f"btc_{s}" if s not in ignore_columns else s, inplace=True)
+
+        tok = time.perf_counter()
+        log.debug(f"[{metadata['pair']}] base_tf_btc_indicators took: {tok - tik:0.4f} seconds.")
 
         return dataframe
 
     def info_tf_btc_indicators(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
+        tik = time.perf_counter()
         # Indicators
         # -----------------------------------------------------------------------------------------
         dataframe['rsi_14'] = ta.RSI(dataframe, timeperiod=14)
@@ -3973,21 +4559,25 @@ class NostalgiaForInfinityNext(IStrategy):
         # -----------------------------------------------------------------------------------------
         ignore_columns = ['date', 'open', 'high', 'low', 'close', 'volume']
         dataframe.rename(columns=lambda s: f"btc_{s}" if s not in ignore_columns else s, inplace=True)
+
+        tok = time.perf_counter()
+        log.debug(f"[{metadata['pair']}] info_tf_btc_indicators took: {tok - tik:0.4f} seconds.")
 
         return dataframe
 
     def daily_tf_btc_indicators(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
+        tik = time.perf_counter()
         # Indicators
         # -----------------------------------------------------------------------------------------
-        dataframe['rsi_14'] = ta.RSI(dataframe, timeperiod=14)
-        dataframe['not_downtrend'] = ((dataframe['close'] > dataframe['close'].shift(2)) | (dataframe['rsi_14'] > 50))
-
-        # pivots
         dataframe['pivot'], dataframe['res1'], dataframe['res2'], dataframe['res3'], dataframe['sup1'], dataframe['sup2'], dataframe['sup3'] = pivot_points(dataframe, mode='fibonacci')
+
         # Add prefix
         # -----------------------------------------------------------------------------------------
         ignore_columns = ['date', 'open', 'high', 'low', 'close', 'volume']
         dataframe.rename(columns=lambda s: f"btc_{s}" if s not in ignore_columns else s, inplace=True)
+
+        tok = time.perf_counter()
+        log.debug(f"[{metadata['pair']}] daily_tf_btc_indicators took: {tok - tik:0.4f} seconds.")
 
         return dataframe
 
@@ -4002,20 +4592,6 @@ class NostalgiaForInfinityNext(IStrategy):
         else:
             btc_info_pair = "BTC/USDT"
 
-        if self.has_BTC_base_tf:
-            btc_base_tf = self.dp.get_pair_dataframe(btc_info_pair, self.timeframe)
-            btc_base_tf = self.base_tf_btc_indicators(btc_base_tf, metadata)
-            dataframe = merge_informative_pair(dataframe, btc_base_tf, self.timeframe, self.timeframe, ffill=True)
-            drop_columns = [f"{s}_{self.timeframe}" for s in ['date', 'open', 'high', 'low', 'close', 'volume']]
-            dataframe.drop(columns=dataframe.columns.intersection(drop_columns), inplace=True)
-
-        if self.has_BTC_info_tf:
-            btc_info_tf = self.dp.get_pair_dataframe(btc_info_pair, self.info_timeframe)
-            btc_info_tf = self.info_tf_btc_indicators(btc_info_tf, metadata)
-            dataframe = merge_informative_pair(dataframe, btc_info_tf, self.timeframe, self.info_timeframe, ffill=True)
-            drop_columns = [f"{s}_{self.info_timeframe}" for s in ['date', 'open', 'high', 'low', 'close', 'volume']]
-            dataframe.drop(columns=dataframe.columns.intersection(drop_columns), inplace=True)
-
         if self.has_BTC_daily_tf:
             btc_daily_tf = self.dp.get_pair_dataframe(btc_info_pair, '1d')
             btc_daily_tf = self.daily_tf_btc_indicators(btc_daily_tf, metadata)
@@ -4023,16 +4599,36 @@ class NostalgiaForInfinityNext(IStrategy):
             drop_columns = [f"{s}_1d" for s in ['date', 'open', 'high', 'low', 'close', 'volume']]
             dataframe.drop(columns=dataframe.columns.intersection(drop_columns), inplace=True)
 
+        if self.has_BTC_info_tf:
+            btc_info_tf = self.dp.get_pair_dataframe(btc_info_pair, self.info_timeframe_1h)
+            btc_info_tf = self.info_tf_btc_indicators(btc_info_tf, metadata)
+            dataframe = merge_informative_pair(dataframe, btc_info_tf, self.timeframe, self.info_timeframe_1h, ffill=True)
+            drop_columns = [f"{s}_{self.info_timeframe_1h}" for s in ['date', 'open', 'high', 'low', 'close', 'volume']]
+            dataframe.drop(columns=dataframe.columns.intersection(drop_columns), inplace=True)
+
+        if self.has_BTC_base_tf:
+            btc_base_tf = self.dp.get_pair_dataframe(btc_info_pair, self.timeframe)
+            btc_base_tf = self.base_tf_btc_indicators(btc_base_tf, metadata)
+            dataframe = merge_informative_pair(dataframe, btc_base_tf, self.timeframe, self.timeframe, ffill=True)
+            drop_columns = [f"{s}_{self.timeframe}" for s in ['date', 'open', 'high', 'low', 'close', 'volume']]
+            dataframe.drop(columns=dataframe.columns.intersection(drop_columns), inplace=True)
 
         '''
         --> Informative timeframe
         ___________________________________________________________________________________________
         '''
-        if self.info_timeframe != 'none':
-            informative_1h = self.informative_1h_indicators(dataframe, metadata)
-            dataframe = merge_informative_pair(dataframe, informative_1h, self.timeframe, self.info_timeframe, ffill=True)
-            drop_columns = [f"{s}_{self.info_timeframe}" for s in ['date']]
+        if self.info_timeframe_1d != 'none':
+            informative_1d = self.informative_1d_indicators(dataframe, metadata)
+            dataframe = merge_informative_pair(dataframe, informative_1d, self.timeframe, self.info_timeframe_1d, ffill=True)
+            drop_columns = [f"{s}_{self.info_timeframe_1d}" for s in ['date','open', 'high', 'low', 'close', 'volume']]
             dataframe.drop(columns=dataframe.columns.intersection(drop_columns), inplace=True)
+
+        if self.info_timeframe_1h != 'none':
+            informative_1h = self.informative_1h_indicators(dataframe, metadata)
+            dataframe = merge_informative_pair(dataframe, informative_1h, self.timeframe, self.info_timeframe_1h, ffill=True)
+            drop_columns = [f"{s}_{self.info_timeframe_1h}" for s in ['date']]
+            dataframe.drop(columns=dataframe.columns.intersection(drop_columns), inplace=True)
+
 
         '''
         --> Resampled to another timeframe
@@ -4055,8 +4651,7 @@ class NostalgiaForInfinityNext(IStrategy):
         dataframe = self.normal_tf_indicators(dataframe, metadata)
 
         tok = time.perf_counter()
-        if self.has_loop_perf_logging:
-            log.info(f"Populate indicators for pair: {metadata['pair']} took {tok - tik:0.4f} seconds.")
+        log.debug(f"[{metadata['pair']}] Populate indicators took a total of: {tok - tik:0.4f} seconds.")
 
         return dataframe
 
@@ -4083,12 +4678,22 @@ class NostalgiaForInfinityNext(IStrategy):
                     item_buy_protection_list.append(dataframe['sma_200'] > dataframe['sma_200'].shift(int(global_buy_protection_params['sma200_rising_val'])))
                 if global_buy_protection_params["sma200_1h_rising"]:
                     item_buy_protection_list.append(dataframe['sma_200_1h'] > dataframe['sma_200_1h'].shift(int(global_buy_protection_params['sma200_1h_rising_val'])))
-                if global_buy_protection_params["safe_dips"]:
-                    item_buy_protection_list.append(dataframe[f"safe_dips_{global_buy_protection_params['safe_dips_type']}"])
+                if global_buy_protection_params["safe_dips_threshold_0"] is not None:
+                    item_buy_protection_list.append(dataframe['tpct_change_0'] < global_buy_protection_params["safe_dips_threshold_0"])
+                if global_buy_protection_params["safe_dips_threshold_2"] is not None:
+                    item_buy_protection_list.append(dataframe['tpct_change_2'] < global_buy_protection_params["safe_dips_threshold_2"])
+                if global_buy_protection_params["safe_dips_threshold_12"] is not None:
+                    item_buy_protection_list.append(dataframe['tpct_change_12'] < global_buy_protection_params["safe_dips_threshold_12"])
+                if global_buy_protection_params["safe_dips_threshold_144"] is not None:
+                    item_buy_protection_list.append(dataframe['tpct_change_144'] < global_buy_protection_params["safe_dips_threshold_144"])
                 if global_buy_protection_params["safe_pump"]:
                     item_buy_protection_list.append(dataframe[f"safe_pump_{global_buy_protection_params['safe_pump_period']}_{global_buy_protection_params['safe_pump_type']}_1h"])
                 if global_buy_protection_params['btc_1h_not_downtrend']:
                     item_buy_protection_list.append(dataframe['btc_not_downtrend_1h'])
+                if global_buy_protection_params['close_over_pivot_type'] != 'none':
+                    item_buy_protection_list.append(dataframe['close'] > dataframe[f"{global_buy_protection_params['close_over_pivot_type']}_1d"] * global_buy_protection_params['close_over_pivot_offset'])
+                if global_buy_protection_params['close_under_pivot_type'] != 'none':
+                    item_buy_protection_list.append(dataframe['close'] < dataframe[f"{global_buy_protection_params['close_under_pivot_type']}_1d"] * global_buy_protection_params['close_under_pivot_offset'])
                 if not self.config['runmode'].value in ('live', 'dry_run'):
                     if self.has_bt_agefilter:
                         item_buy_protection_list.append(dataframe['bt_agefilter_ok'])
@@ -4106,13 +4711,12 @@ class NostalgiaForInfinityNext(IStrategy):
                     # Non-Standard protections
 
                     # Logic
-
-                    item_buy_logic.append(((dataframe['close'] - dataframe['open'].rolling(36).min()) / dataframe['open'].rolling(36).min()) > self.buy_1_min_inc)
+                    item_buy_logic.append(((dataframe['close'] - dataframe['open'].rolling(12).min()) / dataframe['open'].rolling(12).min()) > self.buy_1_min_inc)
+                    item_buy_logic.append(dataframe['rsi_14'] < self.buy_1_rsi_max)
+                    item_buy_logic.append(dataframe['r_14'] < self.buy_2_r_14_max)
+                    item_buy_logic.append(dataframe['mfi'] < self.buy_1_mfi_max)
                     item_buy_logic.append(dataframe['rsi_14_1h'] > self.buy_1_rsi_1h_min)
                     item_buy_logic.append(dataframe['rsi_14_1h'] < self.buy_1_rsi_1h_max)
-                    item_buy_logic.append(dataframe['rsi_14'] < self.buy_1_rsi)
-                    item_buy_logic.append(dataframe['mfi'] < self.buy_1_mfi)
-                    item_buy_logic.append(dataframe['cti_1h'] < self.buy_1_cti_1h)
 
                 # Condition #2
                 elif index == 2:
@@ -4121,28 +4725,27 @@ class NostalgiaForInfinityNext(IStrategy):
                     # Logic
                     item_buy_logic.append(dataframe['rsi_14'] < dataframe['rsi_14_1h'] - self.buy_2_rsi_1h_diff)
                     item_buy_logic.append(dataframe['mfi'] < self.buy_2_mfi)
-                    item_buy_logic.append(dataframe['close'] < (dataframe['bb20_2_low'] * self.buy_2_bb_offset))
-                    item_buy_logic.append(dataframe['volume'] < (dataframe['volume_mean_4'] * self.buy_2_volume))
                     item_buy_logic.append(dataframe['cti'] < self.buy_2_cti_max)
                     item_buy_logic.append(dataframe['r_480'] > self.buy_2_r_480_min)
                     item_buy_logic.append(dataframe['r_480'] < self.buy_2_r_480_max)
                     item_buy_logic.append(dataframe['cti_1h'] < self.buy_2_cti_1h_max)
-                    item_buy_logic.append(dataframe['r_480_1h'] > self.buy_2_r_480_1h_min)
-                    item_buy_logic.append(dataframe['r_480_1h'] < self.buy_2_r_480_1h_max)
+                    item_buy_logic.append(dataframe['volume'] < (dataframe['volume_mean_4'] * self.buy_2_volume))
 
                 # Condition #3
                 elif index == 3:
                     # Non-Standard protections
-                    item_buy_logic.append(dataframe['close'] > (dataframe['ema_200_1h'] * self.buy_ema_rel_3))
 
                     # Logic
                     item_buy_logic.append(dataframe['bb40_2_low'].shift().gt(0))
-                    item_buy_logic.append(dataframe['bb40_2_delta'].gt(dataframe['close'] * self.buy_bb40_bbdelta_close_3))
-                    item_buy_logic.append(dataframe['closedelta'].gt(dataframe['close'] * self.buy_bb40_closedelta_close_3))
-                    item_buy_logic.append(dataframe['tail'].lt(dataframe['bb40_2_delta'] * self.buy_bb40_tail_bbdelta_3))
+                    item_buy_logic.append(dataframe['bb40_2_delta'].gt(dataframe['close'] * self.buy_3_bb40_bbdelta_close))
+                    item_buy_logic.append(dataframe['closedelta'].gt(dataframe['close'] * self.buy_3_bb40_closedelta_close))
+                    item_buy_logic.append(dataframe['tail'].lt(dataframe['bb40_2_delta'] * self.buy_3_bb40_tail_bbdelta))
                     item_buy_logic.append(dataframe['close'].lt(dataframe['bb40_2_low'].shift()))
                     item_buy_logic.append(dataframe['close'].le(dataframe['close'].shift()))
-                    item_buy_logic.append(dataframe['cti'] < self.buy_cti_3)
+                    item_buy_logic.append(dataframe['cci_36_osc'] > self.buy_3_cci_36_osc_min)
+                    item_buy_logic.append(dataframe['crsi_1h'] > self.buy_3_crsi_1h_min)
+                    item_buy_logic.append(dataframe['r_480_1h'] > self.buy_3_r_480_1h_min)
+                    item_buy_logic.append(dataframe['cti_1h'] < self.buy_3_cti_1h_max)
 
                 # Condition #4
                 elif index == 4:
@@ -4150,9 +4753,9 @@ class NostalgiaForInfinityNext(IStrategy):
 
                     # Logic
                     item_buy_logic.append(dataframe['close'] < dataframe['ema_50'])
-                    item_buy_logic.append(dataframe['close'] < self.buy_bb20_close_bblowerband_4 * dataframe['bb20_2_low'])
-                    item_buy_logic.append(dataframe['volume'] < (dataframe['volume_mean_30'].shift(1) * self.buy_bb20_volume_4))
-                    item_buy_logic.append(dataframe['cti'] < self.buy_cti_4)
+                    item_buy_logic.append(dataframe['close'] < self.buy_4_bb20_close_bblowerband * dataframe['bb20_2_low'])
+                    item_buy_logic.append(dataframe['volume'] < (dataframe['volume_mean_30'].shift(1) * self.buy_4_bb20_volume))
+                    item_buy_logic.append(dataframe['cti'] < self.buy_4_cti_max)
 
                 # Condition #5
                 elif index == 5:
@@ -4164,8 +4767,12 @@ class NostalgiaForInfinityNext(IStrategy):
                     item_buy_logic.append((dataframe['ema_26'] - dataframe['ema_12']) > (dataframe['open'] * self.buy_5_ema_open_mult))
                     item_buy_logic.append((dataframe['ema_26'].shift() - dataframe['ema_12'].shift()) > (dataframe['open'] / 100))
                     item_buy_logic.append(dataframe['close'] < (dataframe['bb20_2_low'] * self.buy_5_bb_offset))
-                    item_buy_logic.append(dataframe['cti'] < self.buy_5_cti)
-                    item_buy_logic.append(dataframe['crsi_1h'] > self.buy_5_crsi_1h)
+                    item_buy_logic.append(dataframe['cti'] < self.buy_5_cti_max)
+                    item_buy_logic.append(dataframe['rsi_14'] > self.buy_5_rsi_14_min)
+                    item_buy_logic.append(dataframe['mfi'] > self.buy_5_mfi_min)
+                    item_buy_logic.append(dataframe['r_14'] < self.buy_5_r_14_max)
+                    item_buy_logic.append(dataframe['r_14'].shift(1) < self.buy_5_r_14_max)
+                    item_buy_logic.append(dataframe['crsi_1h'] > self.buy_5_crsi_1h_min)
                     item_buy_logic.append(dataframe['volume'] < (dataframe['volume_mean_4'] * self.buy_5_volume))
 
                 # Condition #6
@@ -4177,6 +4784,8 @@ class NostalgiaForInfinityNext(IStrategy):
                     item_buy_logic.append((dataframe['ema_26'] - dataframe['ema_12']) > (dataframe['open'] * self.buy_6_ema_open_mult))
                     item_buy_logic.append((dataframe['ema_26'].shift() - dataframe['ema_12'].shift()) > (dataframe['open'] / 100))
                     item_buy_logic.append(dataframe['close'] < (dataframe['bb20_2_low'] * self.buy_6_bb_offset))
+                    item_buy_logic.append(dataframe['r_14'] < self.buy_6_r_14_max)
+                    item_buy_logic.append(dataframe['cti_1h'] > self.buy_6_cti_1h_min)
                     item_buy_logic.append(dataframe['crsi_1h'] > self.buy_6_crsi_1h_min)
 
                 # Condition #7
@@ -4187,25 +4796,23 @@ class NostalgiaForInfinityNext(IStrategy):
                     item_buy_logic.append(dataframe['ema_26'] > dataframe['ema_12'])
                     item_buy_logic.append((dataframe['ema_26'] - dataframe['ema_12']) > (dataframe['open'] * self.buy_7_ema_open_mult))
                     item_buy_logic.append((dataframe['ema_26'].shift() - dataframe['ema_12'].shift()) > (dataframe['open'] / 100))
-                    item_buy_logic.append(dataframe['cti'] < self.buy_7_cti)
                     item_buy_logic.append(dataframe['close'] < dataframe['sma_30'] * self.buy_7_ma_offset)
-                    item_buy_logic.append(dataframe['rsi_14'] < self.buy_7_rsi)
-                    item_buy_logic.append(dataframe['cmf_1h'] > self.buy_7_cmf_1h)
+                    item_buy_logic.append(dataframe['cti'] < self.buy_7_cti_max)
+                    item_buy_logic.append(dataframe['rsi_14'] < self.buy_7_rsi_max)
 
                 # Condition #8
                 elif index == 8:
                     # Non-Standard protections
+                    item_buy_logic.append(dataframe['ema_20'] > dataframe['ema_50'])
+                    item_buy_logic.append(dataframe['ema_15'] > dataframe['ema_100'])
+                    item_buy_logic.append(dataframe['ema_200'] > dataframe['sma_200'])
 
                     # Logic
-                    item_buy_logic.append(dataframe['cti'] < self.buy_8_cti)
                     item_buy_logic.append(dataframe['close'] < (dataframe['bb20_2_low'] * self.buy_8_bb_offset))
-                    item_buy_logic.append(dataframe['volume'] < (dataframe['volume_mean_4'] * self.buy_8_volume))
-                    item_buy_logic.append(dataframe['r_480'] < self.buy_8_r_480)
-                    item_buy_logic.append(dataframe['cti_1h'] < self.buy_8_cti_1h)
-                    item_buy_logic.append(dataframe['r_480_1h'] > self.buy_8_r_480_1h_min)
+                    item_buy_logic.append(dataframe['r_14'] < self.buy_8_r_14_max)
+                    item_buy_logic.append(dataframe['cti_1h'] < self.buy_8_cti_1h_max)
                     item_buy_logic.append(dataframe['r_480_1h'] < self.buy_8_r_480_1h_max)
-                    item_buy_logic.append(dataframe['cmf'] > self.buy_8_cmf_min)
-                    item_buy_logic.append(dataframe['cmf'] < self.buy_8_cmf_max)
+                    item_buy_logic.append(dataframe['volume'] < (dataframe['volume_mean_4'] * self.buy_8_volume))
 
                 # Condition #9
                 elif index == 9:
@@ -4216,7 +4823,8 @@ class NostalgiaForInfinityNext(IStrategy):
                     item_buy_logic.append(dataframe['close'] < dataframe['ema_20'] * self.buy_9_ma_offset)
                     item_buy_logic.append(dataframe['close'] < dataframe['bb20_2_low'] * self.buy_9_bb_offset)
                     item_buy_logic.append(dataframe['mfi'] < self.buy_9_mfi_max)
-                    item_buy_logic.append(dataframe['cti'] < self.buy_8_cti_max)
+                    item_buy_logic.append(dataframe['cti'] < self.buy_9_cti_max)
+                    item_buy_logic.append(dataframe['r_14'] < self.buy_9_r_14_max)
                     item_buy_logic.append(dataframe['rsi_14_1h'] > self.buy_9_rsi_1h_min)
                     item_buy_logic.append(dataframe['rsi_14_1h'] < self.buy_9_rsi_1h_max)
                     item_buy_logic.append(dataframe['crsi_1h'] > self.buy_9_crsi_1h_min)
@@ -4227,37 +4835,37 @@ class NostalgiaForInfinityNext(IStrategy):
                     item_buy_logic.append(dataframe['ema_50_1h'] > dataframe['ema_100_1h'])
 
                     # Logic
-                    item_buy_logic.append(dataframe['close'] > dataframe['sma_30'] * self.buy_10_ma_offset_low)
                     item_buy_logic.append(dataframe['close'] < dataframe['sma_30'] * self.buy_10_ma_offset_high)
                     item_buy_logic.append(dataframe['close'] < dataframe['bb20_2_low'] * self.buy_10_bb_offset)
+                    item_buy_logic.append(dataframe['r_14'] < self.buy_10_r_14_max)
                     item_buy_logic.append(dataframe['cti_1h'] > self.buy_10_cti_1h_min)
                     item_buy_logic.append(dataframe['cti_1h'] < self.buy_10_cti_1h_max)
-                    item_buy_logic.append(dataframe['r_480_1h'] > self.buy_10_r_480_1h)
 
                 # Condition #11
                 elif index == 11:
                     # Non-Standard protections
-                    item_buy_logic.append(dataframe['ema_50_1h'] > dataframe['ema_100_1h'])
 
                     # Logic
-                    item_buy_logic.append(((dataframe['close'] - dataframe['open'].rolling(36).min()) / dataframe['open'].rolling(36).min()) > self.buy_11_min_inc)
+                    item_buy_logic.append(((dataframe['close'] - dataframe['open'].rolling(6).min()) / dataframe['open'].rolling(6).min()) > self.buy_11_min_inc)
                     item_buy_logic.append(dataframe['close'] < dataframe['sma_30'] * self.buy_11_ma_offset)
+                    item_buy_logic.append(dataframe['rsi_14'] < self.buy_11_rsi_max)
+                    item_buy_logic.append(dataframe['mfi'] < self.buy_11_mfi_max)
+                    item_buy_logic.append(dataframe['cci'] < self.buy_11_cci_max)
                     item_buy_logic.append(dataframe['rsi_14_1h'] > self.buy_11_rsi_1h_min)
                     item_buy_logic.append(dataframe['rsi_14_1h'] < self.buy_11_rsi_1h_max)
-                    item_buy_logic.append(dataframe['rsi_14'] < self.buy_11_rsi)
-                    item_buy_logic.append(dataframe['mfi'] < self.buy_11_mfi)
-                    item_buy_logic.append(dataframe['r_480_1h'] < self.buy_11_r_480_1h)
-                    item_buy_logic.append(dataframe['r_480'] < self.buy_11_r_480)
+                    item_buy_logic.append(dataframe['cti_1h'] < self.buy_11_cti_1h_max)
+                    item_buy_logic.append(dataframe['r_480_1h'] < self.buy_11_r_480_1h_max)
+                    item_buy_logic.append(dataframe['crsi_1h'] > self.buy_11_crsi_1h_min)
 
                 # Condition #12
                 elif index == 12:
                     # Non-Standard protections
 
                     # Logic
-                    item_buy_logic.append(dataframe['close'] < dataframe['sma_30'] * self.buy_ma_offset_12)
-                    item_buy_logic.append(dataframe['ewo'] > self.buy_ewo_12)
-                    item_buy_logic.append(dataframe['rsi_14'] < self.buy_rsi_12)
-                    item_buy_logic.append(dataframe['cti'] < self.buy_cti_12)
+                    item_buy_logic.append(dataframe['close'] < dataframe['sma_30'] * self.buy_12_ma_offset)
+                    item_buy_logic.append(dataframe['ewo_sma'] > self.buy_12_ewo_min)
+                    item_buy_logic.append(dataframe['rsi_14'] < self.buy_12_rsi_max)
+                    item_buy_logic.append(dataframe['cti'] < self.buy_12_cti_max)
 
                 # Condition #13
                 elif index == 13:
@@ -4266,9 +4874,10 @@ class NostalgiaForInfinityNext(IStrategy):
 
                     # Logic
                     item_buy_logic.append(dataframe['close'] < dataframe['sma_30'] * self.buy_13_ma_offset)
-                    item_buy_logic.append(dataframe['cti'] < self.buy_13_cti)
-                    item_buy_logic.append(dataframe['ewo'] < self.buy_13_ewo)
-                    item_buy_logic.append(dataframe['r_480_1h'] < self.buy_13_r_1h)
+                    item_buy_logic.append(dataframe['cti'] < self.buy_13_cti_max)
+                    item_buy_logic.append(dataframe['ewo_sma'] < self.buy_13_ewo_max)
+                    item_buy_logic.append(dataframe['cti_1h'] < self.buy_13_cti_1h_max)
+                    item_buy_logic.append(dataframe['crsi_1h'] > self.buy_13_crsi_1h_min)
 
                 # Condition #14
                 elif index == 14:
@@ -4280,12 +4889,11 @@ class NostalgiaForInfinityNext(IStrategy):
                     item_buy_logic.append((dataframe['ema_26'].shift() - dataframe['ema_12'].shift()) > (dataframe['open'] / 100))
                     item_buy_logic.append(dataframe['close'] < (dataframe['bb20_2_low'] * self.buy_14_bb_offset))
                     item_buy_logic.append(dataframe['close'] < dataframe['ema_20'] * self.buy_14_ma_offset)
-                    item_buy_logic.append(dataframe['cti'] < self.buy_14_cti)
+                    item_buy_logic.append(dataframe['cti'] < self.buy_14_cti_max)
 
                 # Condition #15
                 elif index == 15:
                     # Non-Standard protections
-                    item_buy_logic.append(dataframe['close'] > dataframe['ema_200_1h'] * self.buy_15_ema_rel)
 
                     # Logic
                     item_buy_logic.append(dataframe['ema_26'] > dataframe['ema_12'])
@@ -4293,6 +4901,7 @@ class NostalgiaForInfinityNext(IStrategy):
                     item_buy_logic.append((dataframe['ema_26'].shift() - dataframe['ema_12'].shift()) > (dataframe['open'] / 100))
                     item_buy_logic.append(dataframe['rsi_14'] < self.buy_15_rsi_min)
                     item_buy_logic.append(dataframe['close'] < dataframe['ema_20'] * self.buy_15_ma_offset)
+                    item_buy_logic.append(dataframe['cti_1h'] > self.buy_15_cti_1h_min)
 
                 # Condition #16
                 elif index == 16:
@@ -4300,12 +4909,9 @@ class NostalgiaForInfinityNext(IStrategy):
 
                     # Logic
                     item_buy_logic.append(dataframe['close'] < dataframe['ema_20'] * self.buy_16_ma_offset)
-                    item_buy_logic.append(dataframe['ewo'] > self.buy_16_ewo)
-                    item_buy_logic.append(dataframe['rsi_14'] < self.buy_16_rsi)
-                    item_buy_logic.append(dataframe['cti'] < self.buy_16_cti)
-                    item_buy_logic.append(dataframe['cti_1h'] < self.buy_16_cti_1h)
-                    item_buy_logic.append(dataframe['r_480'] < self.buy_16_r)
-                    item_buy_logic.append(dataframe['r_480_1h'] < self.buy_16_r_1h)
+                    item_buy_logic.append(dataframe['ewo_sma'] > self.buy_16_ewo_min)
+                    item_buy_logic.append(dataframe['rsi_14'] < self.buy_16_rsi_max)
+                    item_buy_logic.append(dataframe['cti'] < self.buy_16_cti_max)
 
                 # Condition #17
                 elif index == 17:
@@ -4313,10 +4919,9 @@ class NostalgiaForInfinityNext(IStrategy):
 
                     # Logic
                     item_buy_logic.append(dataframe['close'] < dataframe['ema_20'] * self.buy_17_ma_offset)
-                    item_buy_logic.append(dataframe['ewo'] < self.buy_17_ewo)
-                    item_buy_logic.append(dataframe['cti'] < self.buy_17_cti)
-                    item_buy_logic.append(dataframe['cti_1h'] > self.buy_17_cti_1h)
-                    item_buy_logic.append(dataframe['r_480_1h'] < self.buy_17_r_1h)
+                    item_buy_logic.append(dataframe['ewo_sma'] < self.buy_17_ewo_max)
+                    item_buy_logic.append(dataframe['cti'] < self.buy_17_cti_max)
+                    item_buy_logic.append(dataframe['crsi_1h'] > self.buy_17_crsi_1h_min)
                     item_buy_logic.append(dataframe['volume'] < (dataframe['volume_mean_4'] * self.buy_17_volume))
 
                 # Condition #18
@@ -4326,45 +4931,45 @@ class NostalgiaForInfinityNext(IStrategy):
                     item_buy_logic.append(dataframe['sma_200_1h'] > dataframe['sma_200_1h'].shift(36))
 
                     # Logic
-                    item_buy_logic.append(dataframe['rsi_14'] < self.buy_18_rsi)
                     item_buy_logic.append(dataframe['close'] < (dataframe['bb20_2_low'] * self.buy_18_bb_offset))
+                    item_buy_logic.append(dataframe['rsi_14'] < self.buy_18_rsi_max)
+                    item_buy_logic.append(dataframe['cti'] < self.buy_18_cti_max)
+                    item_buy_logic.append(dataframe['cti_1h'] < self.buy_18_cti_1h_max)
                     item_buy_logic.append(dataframe['volume'] < (dataframe['volume_mean_4'] * self.buy_18_volume))
-                    item_buy_logic.append(dataframe['cti'] < self.buy_18_cti)
-                    item_buy_logic.append(dataframe['cti_1h'] < self.buy_18_cti_1h)
 
                 # Condition #19
                 elif index == 19:
                     # Non-Standard protections
+                    item_buy_logic.append(dataframe['moderi_32'] == True)
+                    item_buy_logic.append(dataframe['moderi_64'] == True)
+                    item_buy_logic.append(dataframe['moderi_96'] == True)
 
                     # Logic
                     item_buy_logic.append(dataframe['close'].shift(1) > dataframe['ema_100_1h'])
                     item_buy_logic.append(dataframe['low'] < dataframe['ema_100_1h'])
                     item_buy_logic.append(dataframe['close'] > dataframe['ema_100_1h'])
-                    item_buy_logic.append(dataframe['rsi_14_1h'] > self.buy_rsi_1h_min_19)
-                    item_buy_logic.append(dataframe['chop'] < self.buy_chop_max_19)
-                    item_buy_logic.append(dataframe['moderi_32'] == True)
-                    item_buy_logic.append(dataframe['moderi_64'] == True)
-                    item_buy_logic.append(dataframe['moderi_96'] == True)
+                    item_buy_logic.append(dataframe['chop'] < self.buy_19_chop_max)
+                    item_buy_logic.append(dataframe['rsi_14_1h'] > self.buy_19_rsi_1h_min)
 
                 # Condition #20
                 elif index == 20:
                     # Non-Standard protections
 
                     # Logic
-                    item_buy_logic.append(dataframe['rsi_14'] < self.buy_rsi_20)
-                    item_buy_logic.append(dataframe['rsi_14_1h'] < self.buy_rsi_1h_20)
-                    item_buy_logic.append(dataframe['cti'] < self.buy_cti_20)
-                    item_buy_logic.append(dataframe['volume'] < (dataframe['volume_mean_4'] * self.buy_volume_20))
+                    item_buy_logic.append(dataframe['rsi_14'] < self.buy_20_rsi_14_max)
+                    item_buy_logic.append(dataframe['rsi_14_1h'] < self.buy_20_rsi_14_1h_max)
+                    item_buy_logic.append(dataframe['cti'] < self.buy_20_cti_max)
+                    item_buy_logic.append(dataframe['volume'] < (dataframe['volume_mean_4'] * self.buy_20_volume))
 
                 # Condition #21
                 elif index == 21:
                     # Non-Standard protections
 
                     # Logic
-                    item_buy_logic.append(dataframe['rsi_14'] < self.buy_rsi_21)
-                    item_buy_logic.append(dataframe['rsi_14_1h'] < self.buy_rsi_1h_21)
-                    item_buy_logic.append(dataframe['cti'] < self.buy_cti_21)
-                    item_buy_logic.append(dataframe['volume'] < (dataframe['volume_mean_4'] * self.buy_volume_21))
+                    item_buy_logic.append(dataframe['rsi_14'] < self.buy_21_rsi_14_max)
+                    item_buy_logic.append(dataframe['rsi_14_1h'] < self.buy_21_rsi_14_1h_max)
+                    item_buy_logic.append(dataframe['cti'] < self.buy_21_cti_max)
+                    item_buy_logic.append(dataframe['volume'] < (dataframe['volume_mean_4'] * self.buy_21_volume))
 
                 # Condition #22
                 elif index == 22:
@@ -4376,11 +4981,11 @@ class NostalgiaForInfinityNext(IStrategy):
                     item_buy_logic.append((dataframe['volume_mean_4'] * self.buy_22_volume) > dataframe['volume'])
                     item_buy_logic.append(dataframe['close'] < dataframe['sma_30'] * self.buy_22_ma_offset)
                     item_buy_logic.append(dataframe['close'] < (dataframe['bb20_2_low'] * self.buy_22_bb_offset))
-                    item_buy_logic.append(dataframe['ewo'] > self.buy_22_ewo)
-                    item_buy_logic.append(dataframe['rsi_14'] < self.buy_22_rsi)
-                    item_buy_logic.append(dataframe['cti'] < self.buy_22_cti)
-                    item_buy_logic.append(dataframe['cti_1h'] > self.buy_22_cti_1h)
-                    item_buy_logic.append(dataframe['r_480'] < self.buy_22_r)
+                    item_buy_logic.append(dataframe['ewo_sma'] > self.buy_22_ewo_min)
+                    item_buy_logic.append(dataframe['rsi_14'] < self.buy_22_rsi_14_max)
+                    item_buy_logic.append(dataframe['cti'] < self.buy_22_cti_max)
+                    item_buy_logic.append(dataframe['r_480'] < self.buy_22_r_480_max)
+                    item_buy_logic.append(dataframe['cti_1h'] > self.buy_22_cti_1h_min)
 
                 # Condition #23
                 elif index == 23:
@@ -4388,11 +4993,11 @@ class NostalgiaForInfinityNext(IStrategy):
 
                     # Logic
                     item_buy_logic.append(dataframe['close'] < (dataframe['bb20_2_low'] * self.buy_23_bb_offset))
-                    item_buy_logic.append(dataframe['ewo'] > self.buy_23_ewo_min)
+                    item_buy_logic.append(dataframe['ewo_sma'] > self.buy_23_ewo_min)
                     item_buy_logic.append(dataframe['cti'] < self.buy_23_cti_max)
-                    item_buy_logic.append(dataframe['rsi_14'] < self.buy_23_rsi_max)
-                    item_buy_logic.append(dataframe['rsi_14_1h'] < self.buy_23_rsi_1h_max)
-                    item_buy_logic.append(dataframe['r_480_1h'] > self.buy_23_r_1h_min)
+                    item_buy_logic.append(dataframe['rsi_14'] < self.buy_23_rsi_14_max)
+                    item_buy_logic.append(dataframe['rsi_14_1h'] < self.buy_23_rsi_14_1h_max)
+                    item_buy_logic.append(dataframe['r_480_1h'] > self.buy_23_r_480_1h_min)
                     item_buy_logic.append(dataframe['cti_1h'] < 0.92)
 
                 # Condition #24
@@ -4404,8 +5009,8 @@ class NostalgiaForInfinityNext(IStrategy):
                     item_buy_logic.append(dataframe['ema_12_1h'] > dataframe['ema_35_1h'])
                     item_buy_logic.append(dataframe['cmf_1h'].shift(12) < 0)
                     item_buy_logic.append(dataframe['cmf_1h'] > 0)
-                    item_buy_logic.append(dataframe['rsi_14'] < self.buy_24_rsi_max)
-                    item_buy_logic.append(dataframe['rsi_14_1h'] > self.buy_24_rsi_1h_min)
+                    item_buy_logic.append(dataframe['rsi_14'] < self.buy_24_rsi_14_max)
+                    item_buy_logic.append(dataframe['rsi_14_1h'] > self.buy_24_rsi_14_1h_min)
 
                 # Condition #25
                 elif index == 25:
@@ -4413,7 +5018,7 @@ class NostalgiaForInfinityNext(IStrategy):
 
                     # Logic
                     item_buy_logic.append(dataframe['rsi_20'] < dataframe['rsi_20'].shift())
-                    item_buy_logic.append(dataframe['rsi_4'] < self.buy_25_rsi_4)
+                    item_buy_logic.append(dataframe['rsi_4'] < self.buy_25_rsi_4_max)
                     item_buy_logic.append(dataframe['ema_20_1h'] > dataframe['ema_26_1h'])
                     item_buy_logic.append(dataframe['close'] < (dataframe['sma_15'] * self.buy_25_ma_offset))
                     item_buy_logic.append(dataframe['open'] > (dataframe['sma_15'] * self.buy_25_ma_offset))
@@ -4421,27 +5026,19 @@ class NostalgiaForInfinityNext(IStrategy):
                         (dataframe['open'] < dataframe['ema_20_1h']) & (dataframe['low'] < dataframe['ema_20_1h']) |
                         (dataframe['open'] > dataframe['ema_20_1h']) & (dataframe['low'] > dataframe['ema_20_1h'])
                     )
-                    item_buy_logic.append(dataframe['cti'] < self.buy_25_cti)
-                    item_buy_logic.append(dataframe['close'] > (dataframe['sma_30'] * self.buy_25_ma_offset_low))
-                    item_buy_logic.append(dataframe['cti_1h'] > self.buy_25_cti_1h_min)
-                    item_buy_logic.append(dataframe['cti_1h'] < self.buy_25_cti_1h_max)
-                    item_buy_logic.append(dataframe['r_480_1h'] > self.buy_25_r_1h)
-                    item_buy_logic.append(dataframe['crsi_1h'] > self.buy_25_crsi_1h_min)
-                    item_buy_logic.append(dataframe['crsi_1h'] < self.buy_25_crsi_1h_max)
+                    item_buy_logic.append(dataframe['cti'] < self.buy_25_cti_max)
+                    item_buy_logic.append(dataframe['cci'] < self.buy_25_cci_max)
 
                 # Condition #26
                 elif index == 26:
                     # Non-Standard protections
-                    item_buy_logic.append(dataframe['close'] > dataframe['sma_75'] * self.buy_25_ma_offset_low)
-                    item_buy_logic.append(dataframe['close'] < dataframe['sma_75'] * self.buy_25_ma_offset_high)
 
                     # Logic
                     item_buy_logic.append(dataframe['close'] < (dataframe['zema_61'] * self.buy_26_zema_low_offset))
                     item_buy_logic.append(dataframe['cti'] < self.buy_26_cti_max)
-                    item_buy_logic.append(dataframe['r_480'] > self.buy_26_r_min)
-                    item_buy_logic.append(dataframe['r_480_1h'] > self.buy_26_r_1h_min)
+                    item_buy_logic.append(dataframe['cci'] < self.buy_26_cci_max)
+                    item_buy_logic.append(dataframe['r_14'] < self.buy_26_r_14_max)
                     item_buy_logic.append(dataframe['cti_1h'] < self.buy_26_cti_1h_max)
-                    item_buy_logic.append(dataframe['crsi_1h'] > self.buy_26_crsi_1h_min)
                     item_buy_logic.append(dataframe['volume'] < (dataframe['volume_mean_4'] * self.buy_26_volume))
 
                 # Condition #27
@@ -4462,10 +5059,12 @@ class NostalgiaForInfinityNext(IStrategy):
                     # Logic
                     item_buy_logic.append(dataframe['moderi_64'] == True)
                     item_buy_logic.append(dataframe['close'] < dataframe['hull_75'] * self.buy_28_ma_offset)
-                    item_buy_logic.append(dataframe['ewo'] > self.buy_28_ewo)
-                    item_buy_logic.append(dataframe['rsi_14'] < self.buy_28_rsi)
-                    item_buy_logic.append(dataframe['cti'] < self.buy_28_cti)
-                    item_buy_logic.append(dataframe['cti_1h'] < self.buy_28_cti_1h)
+                    item_buy_logic.append(dataframe['ewo_sma'] > self.buy_28_ewo_min)
+                    item_buy_logic.append(dataframe['rsi_14'] < self.buy_28_rsi_14_max)
+                    item_buy_logic.append(dataframe['cti'] < self.buy_28_cti_max)
+                    item_buy_logic.append(dataframe['cti'].shift(1) < self.buy_28_cti_max)
+                    item_buy_logic.append(dataframe['r_14'] < self.buy_28_r_14_max)
+                    item_buy_logic.append(dataframe['cti_1h'] < self.buy_28_cti_1h_max)
 
                 # Condition #29
                 elif index == 29:
@@ -4474,8 +5073,8 @@ class NostalgiaForInfinityNext(IStrategy):
                     # Logic
                     item_buy_logic.append(dataframe['moderi_64'] == True)
                     item_buy_logic.append(dataframe['close'] < dataframe['hull_75'] * self.buy_29_ma_offset)
-                    item_buy_logic.append(dataframe['ewo'] < self.buy_29_ewo)
-                    item_buy_logic.append(dataframe['cti'] < self.buy_29_cti)
+                    item_buy_logic.append(dataframe['ewo_sma'] < self.buy_29_ewo_max)
+                    item_buy_logic.append(dataframe['cti'] < self.buy_29_cti_max)
 
                 # Condition #30
                 elif index == 30:
@@ -4484,9 +5083,10 @@ class NostalgiaForInfinityNext(IStrategy):
                     # Logic
                     item_buy_logic.append(dataframe['moderi_64'] == False)
                     item_buy_logic.append(dataframe['close'] < dataframe['zlema_68'] * self.buy_30_ma_offset)
-                    item_buy_logic.append(dataframe['ewo'] > self.buy_30_ewo)
-                    item_buy_logic.append(dataframe['rsi_14'] < self.buy_30_rsi)
-                    item_buy_logic.append(dataframe['cti'] < self.buy_30_cti)
+                    item_buy_logic.append(dataframe['ewo_sma'] > self.buy_30_ewo_min)
+                    item_buy_logic.append(dataframe['rsi_14'] < self.buy_30_rsi_14_max)
+                    item_buy_logic.append(dataframe['cti'] < self.buy_30_cti_max)
+                    item_buy_logic.append(dataframe['r_14'] < self.buy_30_r_14_max)
 
                 # Condition #31
                 elif index == 31:
@@ -4494,10 +5094,10 @@ class NostalgiaForInfinityNext(IStrategy):
 
                     # Logic
                     item_buy_logic.append(dataframe['moderi_64'] == False)
-                    item_buy_logic.append(dataframe['close'] < dataframe['zlema_68'] * self.buy_31_ma_offset )
-                    item_buy_logic.append(dataframe['ewo'] < self.buy_31_ewo)
-                    item_buy_logic.append(dataframe['r_480'] < self.buy_31_wr)
-                    item_buy_logic.append(dataframe['cti'] < self.buy_31_cti)
+                    item_buy_logic.append(dataframe['close'] < dataframe['zlema_68'] * self.buy_31_ma_offset)
+                    item_buy_logic.append(dataframe['ewo_sma'] < self.buy_31_ewo_max)
+                    item_buy_logic.append(dataframe['r_14'] < self.buy_31_r_14_max)
+                    item_buy_logic.append(dataframe['cti'] < self.buy_31_cti_max)
 
                 # Condition #32 - Quick mode buy
                 elif index == 32:
@@ -4505,27 +5105,26 @@ class NostalgiaForInfinityNext(IStrategy):
 
                     # Logic
                     item_buy_logic.append(dataframe['rsi_20'] < dataframe['rsi_20'].shift(1))
-                    item_buy_logic.append(dataframe['rsi_4'] < self.buy_32_rsi)
+                    item_buy_logic.append(dataframe['rsi_4'] < self.buy_32_rsi_4_max)
                     item_buy_logic.append(dataframe['ema_20_1h'] > dataframe['ema_25_1h'])
                     item_buy_logic.append(dataframe['close'] < (dataframe['sma_15'] * self.buy_32_ma_offset))
                     item_buy_logic.append(
                         ((dataframe['open'] < dataframe['ema_20_1h']) & (dataframe['low'] < dataframe['ema_20_1h'])) |
                         ((dataframe['open'] > dataframe['ema_20_1h']) & (dataframe['low'] > dataframe['ema_20_1h'])))
-                    item_buy_logic.append(dataframe['cti'] < self.buy_32_cti)
-                    item_buy_logic.append(dataframe['cti_1h'] > self.buy_32_cti_1h)
-                    item_buy_logic.append(dataframe['r_480_1h'] < self.buy_32_r_480_1h)
-                    item_buy_logic.append(dataframe['crsi_1h'] > self.buy_32_crsi_1h)
+                    item_buy_logic.append(dataframe['cti'] < self.buy_32_cti_max)
+                    item_buy_logic.append(dataframe['crsi_1h'] > self.buy_32_crsi_1h_min)
 
                 # Condition #33 - Quick mode buy
                 elif index == 33:
                     # Non-Standard protections
 
                     # Logic
-                    item_buy_logic.append(dataframe['moderi_96'])
-                    item_buy_logic.append(dataframe['cti'] < self.buy_33_cti)
                     item_buy_logic.append(dataframe['close'] < (dataframe['ema_13'] * self.buy_33_ma_offset))
-                    item_buy_logic.append(dataframe['ewo'] > self.buy_33_ewo)
-                    item_buy_logic.append(dataframe['rsi_14'] < self.buy_33_rsi)
+                    item_buy_logic.append(dataframe['ewo_sma'] > self.buy_33_ewo_min)
+                    item_buy_logic.append(dataframe['cti'] < self.buy_33_cti_max)
+                    item_buy_logic.append(dataframe['rsi_14'] < self.buy_33_rsi_max)
+                    item_buy_logic.append(dataframe['r_14'] < self.buy_33_r_14_max)
+                    item_buy_logic.append(dataframe['cti_1h'] < self.buy_33_cti_1h_max)
                     item_buy_logic.append(dataframe['volume'] < (dataframe['volume_mean_4'] * self.buy_33_volume))
 
                 # Condition #34 - Quick mode buy
@@ -4533,10 +5132,11 @@ class NostalgiaForInfinityNext(IStrategy):
                     # Non-Standard protections
 
                     # Logic
-                    item_buy_logic.append(dataframe['cti'] < self.buy_34_cti)
-                    item_buy_logic.append((dataframe['open'] - dataframe['close']) / dataframe['close'] < self.buy_34_dip)
                     item_buy_logic.append(dataframe['close'] < dataframe['ema_13'] * self.buy_34_ma_offset)
-                    item_buy_logic.append(dataframe['ewo'] < self.buy_34_ewo)
+                    item_buy_logic.append(dataframe['ewo_sma'] < self.buy_34_ewo_max)
+                    item_buy_logic.append(dataframe['cti'] < self.buy_34_cti_max)
+                    item_buy_logic.append(dataframe['r_14'] < self.buy_34_r_14_max)
+                    item_buy_logic.append(dataframe['crsi_1h'] > self.buy_34_crsi_1h_min)
                     item_buy_logic.append(dataframe['volume'] < (dataframe['volume_mean_4'] * self.buy_34_volume))
 
                 # Condition #35 - PMAX0 buy
@@ -4546,9 +5146,10 @@ class NostalgiaForInfinityNext(IStrategy):
                     # Logic
                     item_buy_logic.append(dataframe['pm'] <= dataframe['pmax_thresh'])
                     item_buy_logic.append(dataframe['close'] < dataframe['sma_75'] * self.buy_35_ma_offset)
-                    item_buy_logic.append(dataframe['ewo'] > self.buy_35_ewo)
-                    item_buy_logic.append(dataframe['rsi_14'] < self.buy_35_rsi)
-                    item_buy_logic.append(dataframe['cti'] < self.buy_35_cti)
+                    item_buy_logic.append(dataframe['ewo_sma'] > self.buy_35_ewo_min)
+                    item_buy_logic.append(dataframe['rsi_14'] < self.buy_35_rsi_max)
+                    item_buy_logic.append(dataframe['cti'] < self.buy_35_cti_max)
+                    item_buy_logic.append(dataframe['r_14'] < self.buy_35_r_14_max)
 
                 # Condition #36 - PMAX1 buy
                 elif index == 36:
@@ -4557,20 +5158,28 @@ class NostalgiaForInfinityNext(IStrategy):
                     # Logic
                     item_buy_logic.append(dataframe['pm'] <= dataframe['pmax_thresh'])
                     item_buy_logic.append(dataframe['close'] < dataframe['sma_75'] * self.buy_36_ma_offset)
-                    item_buy_logic.append(dataframe['ewo'] < self.buy_36_ewo)
-                    item_buy_logic.append(dataframe['cti'] < self.buy_36_cti)
+                    item_buy_logic.append(dataframe['ewo_sma'] < self.buy_36_ewo_max)
+                    item_buy_logic.append(dataframe['cti'] < self.buy_36_cti_max)
+                    item_buy_logic.append(dataframe['r_14'] < self.buy_36_r_14_max)
+                    item_buy_logic.append(dataframe['crsi_1h'] > self.buy_36_crsi_1h_min)
 
-                # Condition #37 - PMAX2 buy
+
+                # Condition #37 - Quick mode buy
                 elif index == 37:
                     # Non-Standard protections (add below)
 
                     # Logic
-                    item_buy_logic.append(dataframe['pm'] > dataframe['pmax_thresh'])
                     item_buy_logic.append(dataframe['close'] < dataframe['sma_75'] * self.buy_37_ma_offset)
-                    item_buy_logic.append(dataframe['ewo'] > self.buy_37_ewo)
-                    item_buy_logic.append(dataframe['rsi_14'] < self.buy_37_rsi)
-                    item_buy_logic.append(dataframe['cti'] < self.buy_37_cti)
-                    item_buy_logic.append(dataframe['safe_dump_50_1h'])
+                    item_buy_logic.append(((dataframe['close_1h'].shift(12) - dataframe['close_1h']) / dataframe['close_1h']) < self.buy_37_close_1h_max)
+                    item_buy_logic.append(dataframe['ewo_sma'] > self.buy_37_ewo_min)
+                    item_buy_logic.append(dataframe['ewo_sma'] < self.buy_37_ewo_max)
+                    item_buy_logic.append(dataframe['rsi_14'] > self.buy_37_rsi_14_min)
+                    item_buy_logic.append(dataframe['rsi_14'] < self.buy_37_rsi_14_max)
+                    item_buy_logic.append(dataframe['crsi_1h'] > self.buy_37_crsi_1h_min)
+                    item_buy_logic.append(dataframe['crsi_1h'] < self.buy_37_crsi_1h_max)
+                    item_buy_logic.append(dataframe['cti'] < self.buy_37_cti_max)
+                    item_buy_logic.append(dataframe['cti_1h'] < self.buy_37_cti_1h_max)
+                    item_buy_logic.append(dataframe['r_14'] < self.buy_37_r_14_max)
 
                 # Condition #38 - PMAX3 buy
                 elif index == 38:
@@ -4579,8 +5188,10 @@ class NostalgiaForInfinityNext(IStrategy):
                     # Logic
                     item_buy_logic.append(dataframe['pm'] > dataframe['pmax_thresh'])
                     item_buy_logic.append(dataframe['close'] < dataframe['sma_75'] * self.buy_38_ma_offset)
-                    item_buy_logic.append(dataframe['ewo'] < self.buy_38_ewo)
-                    item_buy_logic.append(dataframe['cti'] < self.buy_38_cti)
+                    item_buy_logic.append(dataframe['ewo_sma'] < self.buy_38_ewo_max)
+                    item_buy_logic.append(dataframe['cti'] < self.buy_38_cti_max)
+                    item_buy_logic.append(dataframe['r_14'] < self.buy_38_r_14_max)
+                    item_buy_logic.append(dataframe['crsi_1h'] > self.buy_38_crsi_1h_min)
 
                 # Condition #39 - Ichimoku
                 elif index == 39:
@@ -4594,8 +5205,8 @@ class NostalgiaForInfinityNext(IStrategy):
                     item_buy_logic.append(dataframe['ssl_up_1h'] > dataframe['ssl_down_1h'])
                     item_buy_logic.append(dataframe['close'] < dataframe['ssl_up_1h'])
                     item_buy_logic.append(dataframe['rsi_14_1h'] > dataframe['rsi_14_1h'].shift(12))
-                    item_buy_logic.append(dataframe['cti'] < self.buy_39_cti)
-                    item_buy_logic.append(dataframe['r_480_1h'] < self.buy_39_r_1h)
+                    item_buy_logic.append(dataframe['cti'] < self.buy_39_cti_max)
+                    item_buy_logic.append(dataframe['r_480_1h'] < self.buy_39_r_1h_max)
                     item_buy_logic.append(dataframe['cti_1h'] > self.buy_39_cti_1h_min)
                     item_buy_logic.append(dataframe['cti_1h'] < self.buy_39_cti_1h_max)
                     # Start of trend
@@ -4603,17 +5214,16 @@ class NostalgiaForInfinityNext(IStrategy):
                         (dataframe['leading_senkou_span_a_1h'].shift(12) < dataframe['leading_senkou_span_b_1h'].shift(12))
                     )
 
-                # Condition #40 - ZLEMA X buy
+                # Condition #40
                 elif index == 40:
                     # Non-Standard protections (add below)
 
                     # Logic
-                    item_buy_logic.append(qtpylib.crossed_above(dataframe['zlema_2'], dataframe['zlema_4']))
-                    item_buy_logic.append(dataframe['crsi'] < self.buy_40_crsi)
-                    item_buy_logic.append(dataframe['cci'] < self.buy_40_cci)
-                    item_buy_logic.append(dataframe['rsi_14'] < self.buy_40_rsi)
-                    item_buy_logic.append(dataframe['cti'] < self.buy_40_cti)
-                    item_buy_logic.append(dataframe['r_480_1h'] > self.buy_40_r_1h)
+                    item_buy_logic.append(dataframe['momdiv_buy_1h'] == True)
+                    item_buy_logic.append(dataframe['cci'] < self.buy_40_cci_max)
+                    item_buy_logic.append(dataframe['rsi_14'] < self.buy_40_rsi_max)
+                    item_buy_logic.append(dataframe['r_14'] < self.buy_40_r_14_max)
+                    item_buy_logic.append(dataframe['cti'] < self.buy_40_cti_max)
 
                 # Condition #41
                 elif index == 41:
@@ -4622,16 +5232,12 @@ class NostalgiaForInfinityNext(IStrategy):
                     # Logic
                     item_buy_logic.append(dataframe['ema_200_1h'] > dataframe['ema_200_1h'].shift(12))
                     item_buy_logic.append(dataframe['ema_200_1h'].shift(12) > dataframe['ema_200_1h'].shift(24))
-                    item_buy_logic.append(dataframe['cti_1h'] < self.buy_41_cti_1h_max)
-                    item_buy_logic.append(dataframe['r_480_1h'] > self.buy_41_r_1h_min)
-                    item_buy_logic.append(dataframe['r_480_1h'] < self.buy_41_r_1h_max)
-                    item_buy_logic.append(dataframe['crsi_1h'] > self.buy_41_crsi_1h_min)
-                    item_buy_logic.append(dataframe['ewo_1h'] > self.buy_41_ewo_1h_min)
-                    item_buy_logic.append(dataframe['close'] > dataframe['sma_75'] * self.buy_41_ma_offset_low)
                     item_buy_logic.append(dataframe['close'] < dataframe['sma_75'] * self.buy_41_ma_offset_high)
                     item_buy_logic.append(dataframe['cti'] < self.buy_41_cti_max)
-                    item_buy_logic.append(dataframe['r_480'] < self.buy_41_r_max)
                     item_buy_logic.append(dataframe['cci'] < self.buy_41_cci_max)
+                    item_buy_logic.append(dataframe['ewo_sma_1h'] > self.buy_41_ewo_1h_min)
+                    item_buy_logic.append(dataframe['r_480_1h'] < self.buy_41_r_480_1h_max)
+                    item_buy_logic.append(dataframe['crsi_1h'] > self.buy_41_crsi_1h_min)
 
                 # Condition #42
                 elif index == 42:
@@ -4640,15 +5246,13 @@ class NostalgiaForInfinityNext(IStrategy):
                     # Logic
                     item_buy_logic.append(dataframe['ema_200_1h'] > dataframe['ema_200_1h'].shift(12))
                     item_buy_logic.append(dataframe['ema_200_1h'].shift(12) > dataframe['ema_200_1h'].shift(24))
-                    item_buy_logic.append(dataframe['ewo_1h'] > self.buy_42_ewo_1h_min)
-                    item_buy_logic.append(dataframe['cti_1h'] > self.buy_42_cti_1h_min)
-                    item_buy_logic.append(dataframe['cti_1h'] < self.buy_42_cti_1h_max)
-                    item_buy_logic.append(dataframe['r_480_1h'] > self.buy_42_r_1h_min)
-                    item_buy_logic.append(dataframe['r_480_1h'] < self.buy_42_r_1h_max)
                     item_buy_logic.append(dataframe['ema_26'] > dataframe['ema_12'])
                     item_buy_logic.append((dataframe['ema_26'] - dataframe['ema_12']) > (dataframe['open'] * self.buy_42_ema_open_mult))
                     item_buy_logic.append((dataframe['ema_26'].shift() - dataframe['ema_12'].shift()) > (dataframe['open'] / 100))
                     item_buy_logic.append(dataframe['close'] < (dataframe['bb20_2_low'] * self.buy_42_bb_offset))
+                    item_buy_logic.append(dataframe['ewo_sma_1h'] > self.buy_42_ewo_1h_min)
+                    item_buy_logic.append(dataframe['cti_1h'] > self.buy_42_cti_1h_min)
+                    item_buy_logic.append(dataframe['r_480_1h'] < self.buy_42_r_480_1h_max)
 
                 # Condition #43
                 elif index == 43:
@@ -4657,16 +5261,16 @@ class NostalgiaForInfinityNext(IStrategy):
                     # Logic
                     item_buy_logic.append(dataframe['ema_200_1h'] > dataframe['ema_200_1h'].shift(12))
                     item_buy_logic.append(dataframe['ema_200_1h'].shift(12) > dataframe['ema_200_1h'].shift(24))
-                    item_buy_logic.append(dataframe['cti_1h'] < self.buy_43_cti_1h)
-                    item_buy_logic.append(dataframe['r_480_1h'] > self.buy_43_r_1h)
                     item_buy_logic.append(dataframe['bb40_2_low'].shift().gt(0))
                     item_buy_logic.append(dataframe['bb40_2_delta'].gt(dataframe['close'] * self.buy_43_bb40_bbdelta_close))
                     item_buy_logic.append(dataframe['closedelta'].gt(dataframe['close'] * self.buy_43_bb40_closedelta_close))
                     item_buy_logic.append(dataframe['tail'].lt(dataframe['bb40_2_delta'] * self.buy_43_bb40_tail_bbdelta))
                     item_buy_logic.append(dataframe['close'].lt(dataframe['bb40_2_low'].shift()))
                     item_buy_logic.append(dataframe['close'].le(dataframe['close'].shift()))
-                    item_buy_logic.append(dataframe['cti'] < self.buy_43_cti)
-                    item_buy_logic.append(dataframe['r_480'] > self.buy_43_r)
+                    item_buy_logic.append(dataframe['cti'] < self.buy_43_cti_max)
+                    item_buy_logic.append(dataframe['r_480'] > self.buy_43_r_480_min)
+                    item_buy_logic.append(dataframe['cti_1h'] < self.buy_43_cti_1h_max)
+                    item_buy_logic.append(dataframe['r_480_1h'] > self.buy_43_r_480_1h_min)
 
                 # Condition #44
                 elif index == 44:
@@ -4674,9 +5278,9 @@ class NostalgiaForInfinityNext(IStrategy):
 
                     # Logic
                     item_buy_logic.append(dataframe['close'] < (dataframe['ema_16'] * self.buy_44_ma_offset))
-                    item_buy_logic.append(dataframe['ewo'] < self.buy_44_ewo)
-                    item_buy_logic.append(dataframe['cti'] < self.buy_44_cti)
-                    item_buy_logic.append(dataframe['crsi_1h'] > self.buy_44_crsi_1h)
+                    item_buy_logic.append(dataframe['ewo_sma'] < self.buy_44_ewo_max)
+                    item_buy_logic.append(dataframe['cti'] < self.buy_44_cti_max)
+                    item_buy_logic.append(dataframe['crsi_1h'] > self.buy_44_crsi_1h_min)
 
                 # Condition #45 - Long mode
                 elif index == 45:
@@ -4689,13 +5293,11 @@ class NostalgiaForInfinityNext(IStrategy):
                     item_buy_logic.append(dataframe['tail'].lt(dataframe['bb40_2_delta'] * self.buy_45_bb40_tail_bbdelta))
                     item_buy_logic.append(dataframe['close'].lt(dataframe['bb40_2_low'].shift()))
                     item_buy_logic.append(dataframe['close'].le(dataframe['close'].shift()))
-                    item_buy_logic.append(dataframe['ewo_1h'] > self.buy_45_ewo_1h_min)
-                    item_buy_logic.append(dataframe['cti_1h'] > self.buy_45_cti_1h_min)
-                    item_buy_logic.append(dataframe['cti_1h'] < self.buy_45_cti_1h_max)
-                    item_buy_logic.append(dataframe['r_480_1h'] > self.buy_45_r_1h_min)
-                    item_buy_logic.append(dataframe['r_480_1h'] < self.buy_45_r_1h_max)
-                    item_buy_logic.append(dataframe['r_480'] < self.buy_45_r)
                     item_buy_logic.append(dataframe['close'] < dataframe['sma_30'] * self.buy_45_ma_offset)
+                    item_buy_logic.append(dataframe['ewo_sma'] > self.buy_45_ewo_min)
+                    item_buy_logic.append(dataframe['ewo_sma_1h'] > self.buy_45_ewo_1h_min)
+                    item_buy_logic.append(dataframe['cti_1h'] < self.buy_45_cti_1h_max)
+                    item_buy_logic.append(dataframe['r_480_1h'] < self.buy_45_r_480_1h_max)
 
                 # Condition #46 - Long mode
                 elif index == 46:
@@ -4705,25 +5307,21 @@ class NostalgiaForInfinityNext(IStrategy):
                     item_buy_logic.append(dataframe['ema_26'] > dataframe['ema_12'])
                     item_buy_logic.append((dataframe['ema_26'] - dataframe['ema_12']) > (dataframe['open'] * self.buy_46_ema_open_mult))
                     item_buy_logic.append((dataframe['ema_26'].shift() - dataframe['ema_12'].shift()) > (dataframe['open'] / 100))
-                    item_buy_logic.append(dataframe['close'] < (dataframe['bb20_2_low'] * self.buy_46_bb_offset))
-                    item_buy_logic.append(dataframe['ewo_1h'] > self.buy_46_ewo_1h_min)
+                    item_buy_logic.append(dataframe['ewo_sma_1h'] > self.buy_46_ewo_1h_min)
                     item_buy_logic.append(dataframe['cti_1h'] > self.buy_46_cti_1h_min)
                     item_buy_logic.append(dataframe['cti_1h'] < self.buy_46_cti_1h_max)
-                    item_buy_logic.append(dataframe['r_480_1h'] > self.buy_46_r_1h_min)
-                    item_buy_logic.append(dataframe['r_480_1h'] < self.buy_46_r_1h_max)
-                    item_buy_logic.append(dataframe['r_480'] < self.buy_46_r_max)
 
                 # Condition #47 - Long mode
                 elif index == 47:
                     # Non-Standard protections
 
                     # Logic
-                    item_buy_logic.append(dataframe['ewo'] > self.buy_47_ewo_min)
-                    item_buy_logic.append(dataframe['close'] < (dataframe['ema_50'] * self.buy_47_ma_offset))
-                    item_buy_logic.append(dataframe['rsi_14'] < (dataframe['rsi_14_1h'] - self.buy_47_rsi_diff))
-                    item_buy_logic.append(dataframe['ewo_1h'] > self.buy_47_ewo_1h_min)
-                    item_buy_logic.append(dataframe['r_480_1h'] > self.buy_47_r_1h_min)
-                    item_buy_logic.append(dataframe['r_480_1h'] < self.buy_47_r_1h_max)
+                    item_buy_logic.append(dataframe['ewo_sma'] > self.buy_47_ewo_min)
+                    item_buy_logic.append(dataframe['close'] < (dataframe['sma_30'] * self.buy_47_ma_offset))
+                    item_buy_logic.append(dataframe['rsi_14'] < self.buy_47_rsi_14_max)
+                    item_buy_logic.append(dataframe['cti'] < self.buy_47_cti_max)
+                    item_buy_logic.append(dataframe['r_14'] < self.buy_47_r_14_max)
+                    item_buy_logic.append(dataframe['ewo_sma_1h'] > self.buy_47_ewo_1h_min)
                     item_buy_logic.append(dataframe['cti_1h'] > self.buy_47_cti_1h_min)
                     item_buy_logic.append(dataframe['cti_1h'] < self.buy_47_cti_1h_max)
 
@@ -4737,11 +5335,11 @@ class NostalgiaForInfinityNext(IStrategy):
                     item_buy_logic.append(dataframe['moderi_96'])
 
                     # Logic
-                    item_buy_logic.append(dataframe['ewo'] > self.buy_48_ewo_min)
-                    item_buy_logic.append(dataframe['ewo_1h'] > self.buy_48_ewo_1h_min)
-                    item_buy_logic.append(dataframe['r_480'] > self.buy_48_r_min)
-                    item_buy_logic.append(dataframe['r_480_1h'] > self.buy_48_r_1h_min)
-                    item_buy_logic.append(dataframe['r_480_1h'] < self.buy_48_r_1h_max)
+                    item_buy_logic.append(dataframe['ewo_sma'] > self.buy_48_ewo_min)
+                    item_buy_logic.append(dataframe['ewo_sma_1h'] > self.buy_48_ewo_1h_min)
+                    item_buy_logic.append(dataframe['r_480'] > self.buy_48_r_480_min)
+                    item_buy_logic.append(dataframe['r_480_1h'] > self.buy_48_r_480_1h_min)
+                    item_buy_logic.append(dataframe['r_480_1h'] < self.buy_48_r_480_1h_max)
                     item_buy_logic.append(dataframe['r_480_1h'] > dataframe['r_480_1h'].shift(12))
                     item_buy_logic.append(dataframe['cti_1h'] > self.buy_48_cti_1h_min)
                     item_buy_logic.append(dataframe['crsi_1h'] > self.buy_48_crsi_1h_min)
@@ -4885,6 +5483,13 @@ class NostalgiaForInfinityNext(IStrategy):
 def ewo(dataframe, sma1_length=5, sma2_length=35):
     sma1 = ta.EMA(dataframe, timeperiod=sma1_length)
     sma2 = ta.EMA(dataframe, timeperiod=sma2_length)
+    smadif = (sma1 - sma2) / dataframe['close'] * 100
+    return smadif
+
+
+def ewo_sma(dataframe, sma1_length=5, sma2_length=35):
+    sma1 = ta.SMA(dataframe, timeperiod=sma1_length)
+    sma2 = ta.SMA(dataframe, timeperiod=sma2_length)
     smadif = (sma1 - sma2) / dataframe['close'] * 100
     return smadif
 
@@ -5096,7 +5701,6 @@ def calc_streaks(series: Series):
 
 # SSL Channels
 def SSLChannels(dataframe, length = 7):
-    df = dataframe.copy()
     ATR = ta.ATR(dataframe, timeperiod=14)
     smaHigh = dataframe['high'].rolling(length).mean() + ATR
     smaLow = dataframe['low'].rolling(length).mean() - ATR
@@ -5125,6 +5729,62 @@ def pivot_points(dataframe: DataFrame, mode = 'fibonacci') -> Series:
         sup3 = hlc3_pivot - 1 * hl_range
 
     return hlc3_pivot, res1, res2, res3, sup1, sup2, sup3
+
+def HeikinAshi(dataframe, smooth_inputs = False, smooth_outputs = False, length = 10):
+    df = dataframe[['open','close','high','low']].copy().fillna(0)
+    if smooth_inputs:
+        df['open_s']  = ta.EMA(df['open'], timeframe = length)
+        df['high_s']  = ta.EMA(df['high'], timeframe = length)
+        df['low_s']   = ta.EMA(df['low'],  timeframe = length)
+        df['close_s'] = ta.EMA(df['close'],timeframe = length)
+
+        open_ha  = (df['open_s'].shift(1) + df['close_s'].shift(1)) / 2
+        high_ha  = df.loc[:, ['high_s', 'open_s', 'close_s']].max(axis=1)
+        low_ha   = df.loc[:, ['low_s', 'open_s', 'close_s']].min(axis=1)
+        close_ha = (df['open_s'] + df['high_s'] + df['low_s'] + df['close_s'])/4
+    else:
+        open_ha  = (df['open'].shift(1) + df['close'].shift(1)) / 2
+        high_ha  = df.loc[:, ['high', 'open', 'close']].max(axis=1)
+        low_ha   = df.loc[:, ['low', 'open', 'close']].min(axis=1)
+        close_ha = (df['open'] + df['high'] + df['low'] + df['close'])/4
+
+    open_ha = open_ha.fillna(0)
+    high_ha = high_ha.fillna(0)
+    low_ha  = low_ha.fillna(0)
+    close_ha = close_ha.fillna(0)
+
+    if smooth_outputs:
+        open_sha  = ta.EMA(open_ha, timeframe = length)
+        high_sha  = ta.EMA(high_ha, timeframe = length)
+        low_sha   = ta.EMA(low_ha, timeframe = length)
+        close_sha = ta.EMA(close_ha, timeframe = length)
+
+        return open_sha, close_sha, low_sha
+    else:
+        return open_ha, close_ha, low_ha
+
+
+# Mom DIV
+def momdiv(dataframe: DataFrame, mom_length: int = 10, bb_length: int = 20, bb_dev: float = 2.0, lookback: int = 30) -> DataFrame:
+    mom: Series = ta.MOM(dataframe, timeperiod=mom_length)
+    upperband, middleband, lowerband = ta.BBANDS(mom, timeperiod=bb_length, nbdevup=bb_dev, nbdevdn=bb_dev, matype=0)
+    buy = qtpylib.crossed_below(mom, lowerband)
+    sell = qtpylib.crossed_above(mom, upperband)
+    hh = dataframe['high'].rolling(lookback).max()
+    ll = dataframe['low'].rolling(lookback).min()
+    coh = dataframe['high'] >= hh
+    col = dataframe['low'] <= ll
+    df = DataFrame({
+            "momdiv_mom": mom,
+            "momdiv_upperb": upperband,
+            "momdiv_lowerb": lowerband,
+            "momdiv_buy": buy,
+            "momdiv_sell": sell,
+            "momdiv_coh": coh,
+            "momdiv_col": col,
+        }, index=dataframe['close'].index)
+    return df
+
 
 class Cache:
 
