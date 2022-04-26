@@ -15,7 +15,7 @@ from typing import Dict
 from freqtrade.persistence import Trade
 from datetime import datetime, timedelta
 from technical.util import resample_to_interval, resampled_merge
-from technical.indicators import zema, VIDYA, ichimoku
+from technical.indicators import RMI, zema, VIDYA, ichimoku
 import time
 
 log = logging.getLogger(__name__)
@@ -1933,7 +1933,7 @@ class NostalgiaForInfinityNext(IStrategy):
     # Long duration/recover stoploss 1
     sell_custom_stoploss_long_profit_min_1 = -0.08
     sell_custom_stoploss_long_profit_max_1 = -0.04
-    sell_custom_stoploss_long_recover_1 = 0.14
+    sell_custom_stoploss_long_recover_1 = 0.08
     sell_custom_stoploss_long_rsi_diff_1 = 4.0
 
     # Long duration/recover stoploss 2
@@ -1969,7 +1969,7 @@ class NostalgiaForInfinityNext(IStrategy):
 
     # Recover
     sell_custom_recover_profit_1 = 0.06
-    sell_custom_recover_min_loss_1 = 0.12
+    sell_custom_recover_min_loss_1 = 0.08
 
     sell_custom_recover_profit_min_2 = 0.01
     sell_custom_recover_profit_max_2 = 0.05
@@ -2123,7 +2123,7 @@ class NostalgiaForInfinityNext(IStrategy):
 
     def sell_over_main(self, current_profit: float, last_candle) -> tuple:
         if last_candle['close'] > last_candle['ema_200']:
-            if (last_candle['moderi_96']):
+            if (last_candle['ema_vwma_osc_96']):
                 if current_profit >= 0.20:
                     if last_candle['rsi_14'] < 30.0 and (last_candle['cmf'] < 0.0):
                         return True, 'signal_profit_o_bull_12_1'
@@ -2336,7 +2336,7 @@ class NostalgiaForInfinityNext(IStrategy):
 
     def sell_under_main(self, current_profit: float, last_candle) -> tuple:
         if last_candle['close'] < last_candle['ema_200']:
-            if (last_candle['moderi_96']):
+            if (last_candle['ema_vwma_osc_96']):
                 if current_profit >= 0.20:
                     if last_candle['rsi_14'] < 30.0 and (last_candle['cmf'] < 0.0):
                         return True, 'signal_profit_u_bull_12_1'
@@ -3015,7 +3015,7 @@ class NostalgiaForInfinityNext(IStrategy):
         return False, None
 
     def sell_r_1(self, current_profit: float, last_candle) -> tuple:
-        if 0.02 > current_profit >= 0.012:
+        if 0.02 > current_profit >= 0.01:
             if last_candle['r_480'] > -0.4:
                 return True, 'signal_profit_w_1_1'
         elif 0.03 > current_profit >= 0.02:
@@ -3832,6 +3832,9 @@ class NostalgiaForInfinityNext(IStrategy):
 
         # CMF
         dataframe['cmf'] = chaikin_money_flow(dataframe, 20)
+
+        # EMA of VWMA Oscillator
+        dataframe['ema_vwma_osc_96'] = ema_vwma_osc(dataframe, 96)
 
         # EWO
         dataframe['ewo'] = ewo(dataframe, 50, 200)
@@ -4944,6 +4947,10 @@ def vwma(dataframe: DataFrame, length: int = 10):
 def moderi(dataframe: DataFrame, len_slow_ma: int = 32) -> Series:
     slow_ma = Series(ta.EMA(vwma(dataframe, length=len_slow_ma), timeperiod=len_slow_ma))
     return slow_ma >= slow_ma.shift(1)  # we just need true & false for ERI trend
+
+def ema_vwma_osc(dataframe, len_slow_ma):
+    slow_ema = Series(ta.EMA(vwma(dataframe, len_slow_ma), len_slow_ma))
+    return ((slow_ema - slow_ema.shift(1)) / slow_ema.shift(1)) * 100
 
 
 # zlema
