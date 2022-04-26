@@ -2189,68 +2189,6 @@ class NostalgiaForInfinityNext(IStrategy):
     profit_target_1_enable = False
     #############################################################
 
-    plot_config = {
-        'main_plot': {
-            'ema_12_1h': { 'color': 'rgba(200,200,100,0.4)' },
-            'ema_15_1h': { 'color': 'rgba(200,180,100,0.4)' },
-            'ema_20_1h': { 'color': 'rgba(200,160,100,0.4)' },
-            'ema_25_1h': { 'color': 'rgba(200,140,100,0.4)' },
-            'ema_26_1h': { 'color': 'rgba(200,120,100,0.4)' },
-            'ema_35_1h': { 'color': 'rgba(200,100,100,0.4)' },
-            'ema_50_1h': { 'color': 'rgba(200,80,100,0.4)' },
-            'ema_100_1h': { 'color': 'rgba(200,60,100,0.4)' },
-            'ema_200_1h': { 'color': 'rgba(200,40,100,0.4)' },
-            'sma_200_1h': { 'color': 'rgba(150,20,100,0.4)' },
-            'pm': { 'color': 'rgba(100,20,100,0.5)' }
-        },
-        'subplots': {
-            'buy tag': { 'buy_tag': {'color': 'green'} },
-            'RSI/BTC': {
-                'btc_not_downtrend_1h': { 'color': 'yellow' },
-                'btc_rsi_14_1h': { 'color': 'green' },
-                'rsi_14_1h': { 'color': '#f41cd1' },
-                'crsi': {'color': 'blue' }
-            },
-            'pump': {
-                'cti_1h': {'color': 'pink' },
-                'safe_pump_24_10_1h': {'color': '#481110' },
-                'safe_pump_24_20_1h': {'color': '#481120' },
-                'safe_pump_24_30_1h': {'color': '#481130' },
-                'safe_pump_24_40_1h': {'color': '#481140' },
-                'safe_pump_24_50_1h': {'color': '#481150' },
-                'safe_pump_24_60_1h': {'color': '#481160' },
-                'safe_pump_24_70_1h': {'color': '#481170' },
-                'safe_pump_24_80_1h': {'color': '#481180' },
-                'safe_pump_24_90_1h': {'color': '#481190' },
-                'safe_pump_24_100_1h': {'color': '#4811A0' },
-                'safe_pump_24_120_1h': {'color': '#4811C0' },
-                'safe_pump_36_10_1h': {'color': '#721110' },
-                'safe_pump_36_20_1h': {'color': '#721120' },
-                'safe_pump_36_30_1h': {'color': '#721130' },
-                'safe_pump_36_40_1h': {'color': '#721140' },
-                'safe_pump_36_50_1h': {'color': '#721150' },
-                'safe_pump_36_60_1h': {'color': '#721160' },
-                'safe_pump_36_70_1h': {'color': '#721170' },
-                'safe_pump_36_80_1h': {'color': '#721180' },
-                'safe_pump_36_90_1h': {'color': '#721190' },
-                'safe_pump_36_100_1h': {'color': '#7211A0' },
-                'safe_pump_36_120_1h': {'color': '#7211C0' },
-                'safe_pump_48_10_1h': {'color': '#961110' },
-                'safe_pump_48_20_1h': {'color': '#961120' },
-                'safe_pump_48_30_1h': {'color': '#961130' },
-                'safe_pump_48_40_1h': {'color': '#961140' },
-                'safe_pump_48_50_1h': {'color': '#961150' },
-                'safe_pump_48_60_1h': {'color': '#961160' },
-                'safe_pump_48_70_1h': {'color': '#961170' },
-                'safe_pump_48_80_1h': {'color': '#961180' },
-                'safe_pump_48_90_1h': {'color': '#961190' },
-                'safe_pump_48_100_1h': {'color': '#9611A0' },
-                'safe_pump_48_120_1h': {'color': '#9611C0' }
-            }
-        }
-    }
-
-    #############################################################
     # CACHES
 
     hold_trades_cache = None
@@ -2464,8 +2402,6 @@ class NostalgiaForInfinityNext(IStrategy):
                 stake_amount = filled_buys[0].cost
                 # This then calculates current safety order size
                 stake_amount = stake_amount * (0.35 + (count_of_buys * 0.005))
-            if (stake_amount < min_stake):
-                stake_amount = min_stake
                 return stake_amount
             except Exception as exception:
                 return None
