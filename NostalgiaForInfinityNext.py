@@ -2421,9 +2421,16 @@ class NostalgiaForInfinityNext(IStrategy):
             return None
 
         dataframe, _ = self.dp.get_analyzed_dataframe(trade.pair, self.timeframe)
+        if(len(dataframe) < 2):
+            return None
         last_candle = dataframe.iloc[-1].squeeze()
         previous_candle = dataframe.iloc[-2].squeeze()
         # simple TA checks, to assure that the price is not dropping rapidly
+        if (
+                # drop in the last candle
+                ((last_candle['tpct_change_0'] > 0.018) and (last_candle['close'] < last_candle['open']))
+        ):
+            return None
 
         count_of_buys = 0
         filled_buys = trade.select_filled_orders('buy')
