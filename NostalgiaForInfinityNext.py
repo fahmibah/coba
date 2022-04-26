@@ -143,7 +143,7 @@ class NostalgiaForInfinityNext(IStrategy):
     position_adjustment_enable = True
     max_rebuy_orders = 2
     max_rebuy_multiplier = 3.0
-    rebuy_pcts = (-0.06, -0.08)
+    rebuy_pcts = (-0.04, -0.08)
 
     # Do you want to use the hold feature? (with hold-trades.json)
     holdSupportEnabled = False
@@ -2417,7 +2417,7 @@ class NostalgiaForInfinityNext(IStrategy):
         :return float: Stake amount to adjust your trade
         """
 
-        if (self.config['position_adjustment_enable'] == False) or (current_profit > -0.06):
+        if (self.config['position_adjustment_enable'] == False) or (current_profit > -0.04):
             return None
 
         dataframe, _ = self.dp.get_analyzed_dataframe(trade.pair, self.timeframe)
