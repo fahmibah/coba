@@ -142,8 +142,8 @@ class NostalgiaForInfinityNext(IStrategy):
     # Rebuy feature
     position_adjustment_enable = True
     max_rebuy_orders = 2
-    max_rebuy_multiplier = 3.0
-    rebuy_pcts = (-0.04, -0.08)
+    max_rebuy_multiplier = 1.0
+    rebuy_pcts = (-0.08, -0.12)
 
     # Do you want to use the hold feature? (with hold-trades.json)
     holdSupportEnabled = False
@@ -2417,7 +2417,7 @@ class NostalgiaForInfinityNext(IStrategy):
         :return float: Stake amount to adjust your trade
         """
 
-        if (self.config['position_adjustment_enable'] == False) or (current_profit > -0.04):
+        if (self.config['position_adjustment_enable'] == False) or (current_profit > -0.08):
             return None
 
         dataframe, _ = self.dp.get_analyzed_dataframe(trade.pair, self.timeframe)
@@ -2463,7 +2463,9 @@ class NostalgiaForInfinityNext(IStrategy):
                 # This returns first order stake size
                 stake_amount = filled_buys[0].cost
                 # This then calculates current safety order size
-                stake_amount = stake_amount
+                stake_amount = stake_amount * (0.35 + (count_of_buys * 0.005))
+            if (stake_amount < min_stake):
+                stake_amount = min_stake
                 return stake_amount
             except Exception as exception:
                 return None
@@ -3396,7 +3398,7 @@ class NostalgiaForInfinityNext(IStrategy):
 
     def sell_stoploss_doom(self, current_profit: float, last_candle, previous_candle_1, trade: 'Trade', current_time: 'datetime') -> tuple:
         if (
-                (current_profit < -0.1)
+                (current_profit < -0.15)
                 and (last_candle['close'] < last_candle['ema_200'])
                 and (last_candle['close'] < (last_candle['ema_200'] - last_candle['atr']))
                 and (last_candle['sma_200_dec_20'])
