@@ -2080,22 +2080,38 @@ class NostalgiaForInfinityNext(IStrategy):
         :return float: Stake amount to adjust your trade
         """
 
-        if (self.config['position_adjustment_enable'] == False) or (current_profit > -0.08):
+        if (self.config['position_adjustment_enable'] == False) or (current_profit > -0.06):
             return None
 
         dataframe, _ = self.dp.get_analyzed_dataframe(trade.pair, self.timeframe)
         last_candle = dataframe.iloc[-1].squeeze()
         previous_candle = dataframe.iloc[-2].squeeze()
         # simple TA checks, to assure that the price is not dropping rapidly
-        if (
-                (last_candle['crsi_1h'] < 20.0)
-                or (last_candle['close_1h'] < last_candle['open_1h'])
-                or (last_candle['close'] < last_candle['open'])
-        ):
-            return None
 
+        count_of_buys = 0
         filled_buys = trade.select_filled_orders('buy')
         count_of_buys = len(filled_buys)
+
+        if (count_of_buys == 0):
+            return None
+
+        if (count_of_buys == 1):
+                if (
+                        (current_profit < -0.06)
+                        and (
+                            (last_candle['crsi'] > 12.0)
+                        )
+                ):
+            return None
+            elif (count_of_buys == 2):
+                if (
+                        (current_profit < -0.08)
+                        and (
+                            (last_candle['crsi'] > 20.0)
+                            and (last_candle['crsi_1h'] > 11.0)
+                        )
+                ):
+            return None
 
         # Maximum 2 rebuys, equal stake as the original
         if 0 < count_of_buys <= self.max_rebuy_orders:
