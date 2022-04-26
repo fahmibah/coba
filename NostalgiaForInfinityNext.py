@@ -2436,7 +2436,7 @@ class NostalgiaForInfinityNext(IStrategy):
             if (
                     (current_profit < self.rebuy_pcts[0])
                     and (
-                        (last_candle['crsi'] < 10.0)
+                        (last_candle['crsi'] > 12.0)
                     )
             ):
                 return None
@@ -2444,7 +2444,8 @@ class NostalgiaForInfinityNext(IStrategy):
             if (
                     (current_profit < self.rebuy_pcts[1])
                     and (
-                        (last_candle['crsi'] < 20.0)
+                        (last_candle['crsi'] > 20.0)
+                        and (last_candle['crsi_1h'] > 11.0)
                     )
             ):
                 return None
