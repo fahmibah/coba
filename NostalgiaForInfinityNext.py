@@ -15,7 +15,7 @@ from typing import Dict
 from freqtrade.persistence import Trade
 from datetime import datetime, timedelta
 from technical.util import resample_to_interval, resampled_merge
-from technical.indicators import RMI, zema, VIDYA, ichimoku
+from technical.indicators import RMI,zema, VIDYA, ichimoku
 import time
 
 log = logging.getLogger(__name__)
@@ -2123,7 +2123,7 @@ class NostalgiaForInfinityNext(IStrategy):
 
     def sell_over_main(self, current_profit: float, last_candle) -> tuple:
         if last_candle['close'] > last_candle['ema_200']:
-            if (last_candle['ema_vwma_osc_96']):
+            if (last_candle['moderi_96']):
                 if current_profit >= 0.20:
                     if last_candle['rsi_14'] < 30.0 and (last_candle['cmf'] < 0.0):
                         return True, 'signal_profit_o_bull_12_1'
@@ -2336,7 +2336,7 @@ class NostalgiaForInfinityNext(IStrategy):
 
     def sell_under_main(self, current_profit: float, last_candle) -> tuple:
         if last_candle['close'] < last_candle['ema_200']:
-            if (last_candle['ema_vwma_osc_96']):
+            if (last_candle['moderi_96']):
                 if current_profit >= 0.20:
                     if last_candle['rsi_14'] < 30.0 and (last_candle['cmf'] < 0.0):
                         return True, 'signal_profit_u_bull_12_1'
@@ -3833,9 +3833,6 @@ class NostalgiaForInfinityNext(IStrategy):
         # CMF
         dataframe['cmf'] = chaikin_money_flow(dataframe, 20)
 
-        # EMA of VWMA Oscillator
-        dataframe['ema_vwma_osc_96'] = ema_vwma_osc(dataframe, 96)
-
         # EWO
         dataframe['ewo'] = ewo(dataframe, 50, 200)
 
@@ -4947,10 +4944,6 @@ def vwma(dataframe: DataFrame, length: int = 10):
 def moderi(dataframe: DataFrame, len_slow_ma: int = 32) -> Series:
     slow_ma = Series(ta.EMA(vwma(dataframe, length=len_slow_ma), timeperiod=len_slow_ma))
     return slow_ma >= slow_ma.shift(1)  # we just need true & false for ERI trend
-
-def ema_vwma_osc(dataframe, len_slow_ma):
-    slow_ema = Series(ta.EMA(vwma(dataframe, len_slow_ma), len_slow_ma))
-    return ((slow_ema - slow_ema.shift(1)) / slow_ema.shift(1)) * 100
 
 
 # zlema
