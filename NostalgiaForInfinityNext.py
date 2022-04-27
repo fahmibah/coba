@@ -4,6 +4,7 @@ import pathlib
 import rapidjson
 import freqtrade.vendor.qtpylib.indicators as qtpylib
 import numpy as np
+import pandas as pd
 import talib.abstract as ta
 from freqtrade.strategy.interface import IStrategy
 from freqtrade.strategy import merge_informative_pair, timeframe_to_minutes
