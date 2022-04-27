@@ -229,13 +229,6 @@ class NostalgiaForInfinityNext(IStrategy):
         #############
         # Enable/Disable conditions
         "sell_condition_1_enable": True,
-        "sell_condition_2_enable": True,
-        "sell_condition_3_enable": True,
-        "sell_condition_4_enable": True,
-        "sell_condition_5_enable": True,
-        "sell_condition_6_enable": True,
-        "sell_condition_7_enable": True,
-        "sell_condition_8_enable": True,
         #############
     }
 
@@ -1735,13 +1728,6 @@ class NostalgiaForInfinityNext(IStrategy):
     # Sell
 
     sell_condition_1_enable = True
-    sell_condition_2_enable = True
-    sell_condition_3_enable = True
-    sell_condition_4_enable = True
-    sell_condition_5_enable = True
-    sell_condition_6_enable = True
-    sell_condition_7_enable = True
-    sell_condition_8_enable = True
 
     # 48h for pump sell checks
     sell_pump_threshold_48_1 = 0.9
@@ -1758,134 +1744,6 @@ class NostalgiaForInfinityNext(IStrategy):
     sell_pump_threshold_24_2 = 0.62
     sell_pump_threshold_24_3 = 0.88
 
-    sell_rsi_bb_1 = 79.5
-
-    sell_rsi_bb_2 = 81
-
-    sell_rsi_main_3 = 87.0
-
-    sell_dual_rsi_rsi_4 = 73.4
-    sell_dual_rsi_rsi_1h_4 = 79.6
-
-    sell_ema_relative_5 = 0.024
-    sell_rsi_diff_5 = 4.4
-
-    sell_rsi_under_6 = 79.0
-
-    sell_rsi_1h_7 = 81.7
-
-    sell_bb_relative_8 = 1.1
-
-    # Profit over EMA200
-    sell_custom_profit_bull_0 = 0.012
-    sell_custom_rsi_under_bull_0 = 34.0
-    sell_custom_profit_bull_1 = 0.02
-    sell_custom_rsi_under_bull_1 = 35.0
-    sell_custom_profit_bull_2 = 0.03
-    sell_custom_rsi_under_bull_2 = 36.0
-    sell_custom_profit_bull_3 = 0.04
-    sell_custom_rsi_under_bull_3 = 44.0
-    sell_custom_profit_bull_4 = 0.05
-    sell_custom_rsi_under_bull_4 = 45.0
-    sell_custom_profit_bull_5 = 0.06
-    sell_custom_rsi_under_bull_5 = 49.0
-    sell_custom_profit_bull_6 = 0.07
-    sell_custom_rsi_under_bull_6 = 50.0
-    sell_custom_profit_bull_7 = 0.08
-    sell_custom_rsi_under_bull_7 = 57.0
-    sell_custom_profit_bull_8 = 0.09
-    sell_custom_rsi_under_bull_8 = 50.0
-    sell_custom_profit_bull_9 = 0.1
-    sell_custom_rsi_under_bull_9 = 46.0
-    sell_custom_profit_bull_10 = 0.12
-    sell_custom_rsi_under_bull_10 = 42.0
-    sell_custom_profit_bull_11 = 0.20
-    sell_custom_rsi_under_bull_11 = 30.0
-
-    sell_custom_profit_bear_0 = 0.012
-    sell_custom_rsi_under_bear_0 = 34.0
-    sell_custom_profit_bear_1 = 0.02
-    sell_custom_rsi_under_bear_1 = 35.0
-    sell_custom_profit_bear_2 = 0.03
-    sell_custom_rsi_under_bear_2 = 37.0
-    sell_custom_profit_bear_3 = 0.04
-    sell_custom_rsi_under_bear_3 = 44.0
-    sell_custom_profit_bear_4 = 0.05
-    sell_custom_rsi_under_bear_4 = 48.0
-    sell_custom_profit_bear_5 = 0.06
-    sell_custom_rsi_under_bear_5 = 50.0
-    sell_custom_rsi_over_bear_5 = 78.0
-    sell_custom_profit_bear_6 = 0.07
-    sell_custom_rsi_under_bear_6 = 52.0
-    sell_custom_rsi_over_bear_6 = 78.0
-    sell_custom_profit_bear_7 = 0.08
-    sell_custom_rsi_under_bear_7 = 57.0
-    sell_custom_rsi_over_bear_7 = 77.0
-    sell_custom_profit_bear_8 = 0.09
-    sell_custom_rsi_under_bear_8 = 55.0
-    sell_custom_rsi_over_bear_8 = 75.5
-    sell_custom_profit_bear_9 = 0.1
-    sell_custom_rsi_under_bear_9 = 46.0
-    sell_custom_profit_bear_10 = 0.12
-    sell_custom_rsi_under_bear_10 = 42.0
-    sell_custom_profit_bear_11 = 0.20
-    sell_custom_rsi_under_bear_11 = 30.0
-
-    # Profit under EMA200
-    sell_custom_under_profit_bull_0 = 0.01
-    sell_custom_under_rsi_under_bull_0 = 38.0
-    sell_custom_under_profit_bull_1 = 0.02
-    sell_custom_under_rsi_under_bull_1 = 46.0
-    sell_custom_under_profit_bull_2 = 0.03
-    sell_custom_under_rsi_under_bull_2 = 47.0
-    sell_custom_under_profit_bull_3 = 0.04
-    sell_custom_under_rsi_under_bull_3 = 48.0
-    sell_custom_under_profit_bull_4 = 0.05
-    sell_custom_under_rsi_under_bull_4 = 49.0
-    sell_custom_under_profit_bull_5 = 0.06
-    sell_custom_under_rsi_under_bull_5 = 50.0
-    sell_custom_under_profit_bull_6 = 0.07
-    sell_custom_under_rsi_under_bull_6 = 52.0
-    sell_custom_under_profit_bull_7 = 0.08
-    sell_custom_under_rsi_under_bull_7 = 57.0
-    sell_custom_under_profit_bull_8 = 0.09
-    sell_custom_under_rsi_under_bull_8 = 50.0
-    sell_custom_under_profit_bull_9 = 0.1
-    sell_custom_under_rsi_under_bull_9 = 46.0
-    sell_custom_under_profit_bull_10 = 0.12
-    sell_custom_under_rsi_under_bull_10 = 42.0
-    sell_custom_under_profit_bull_11 = 0.2
-    sell_custom_under_rsi_under_bull_11 = 30.0
-
-    sell_custom_under_profit_bear_0 = 0.01
-    sell_custom_under_rsi_under_bear_0 = 38.0
-    sell_custom_under_profit_bear_1 = 0.02
-    sell_custom_under_rsi_under_bear_1 = 56.0
-    sell_custom_under_profit_bear_2 = 0.03
-    sell_custom_under_rsi_under_bear_2 = 57.0
-    sell_custom_under_profit_bear_3 = 0.04
-    sell_custom_under_rsi_under_bear_3 = 57.0
-    sell_custom_under_profit_bear_4 = 0.05
-    sell_custom_under_rsi_under_bear_4 = 57.0
-    sell_custom_under_profit_bear_5 = 0.06
-    sell_custom_under_rsi_under_bear_5 = 57.0
-    sell_custom_under_rsi_over_bear_5 = 78.0
-    sell_custom_under_profit_bear_6 = 0.07
-    sell_custom_under_rsi_under_bear_6 = 57.0
-    sell_custom_under_rsi_over_bear_6 = 78.0
-    sell_custom_under_profit_bear_7 = 0.08
-    sell_custom_under_rsi_under_bear_7 = 57.0
-    sell_custom_under_rsi_over_bear_7 = 80.0
-    sell_custom_under_profit_bear_8 = 0.09
-    sell_custom_under_rsi_under_bear_8 = 50.0
-    sell_custom_under_rsi_over_bear_8 = 82.0
-    sell_custom_under_profit_bear_9 = 0.1
-    sell_custom_under_rsi_under_bear_9 = 46.0
-    sell_custom_under_profit_bear_10 = 0.12
-    sell_custom_under_rsi_under_bear_10 = 42.0
-    sell_custom_under_profit_bear_11 = 0.2
-    sell_custom_under_rsi_under_bear_11 = 30.0
-
     # SMA descending
     sell_custom_dec_profit_min_1 = 0.05
     sell_custom_dec_profit_max_1 = 0.12
@@ -1893,40 +1751,6 @@ class NostalgiaForInfinityNext(IStrategy):
     # Under EMA100
     sell_custom_dec_profit_min_2 = 0.07
     sell_custom_dec_profit_max_2 = 0.16
-
-    # Trail 1
-    sell_trail_profit_min_1 = 0.03
-    sell_trail_profit_max_1 = 0.05
-    sell_trail_down_1 = 0.05
-    sell_trail_rsi_min_1 = 10.0
-    sell_trail_rsi_max_1 = 20.0
-
-    # Trail 2
-    sell_trail_profit_min_2 = 0.1
-    sell_trail_profit_max_2 = 0.4
-    sell_trail_down_2 = 0.03
-    sell_trail_rsi_min_2 = 20.0
-    sell_trail_rsi_max_2 = 50.0
-
-    # Trail 3
-    sell_trail_profit_min_3 = 0.06
-    sell_trail_profit_max_3 = 0.2
-    sell_trail_down_3 = 0.05
-
-    # Trail 4
-    sell_trail_profit_min_4 = 0.03
-    sell_trail_profit_max_4 = 0.06
-    sell_trail_down_4 = 0.02
-
-    # Under & near EMA200, accept profit
-    sell_custom_profit_under_profit_min_1 = 0.001
-    sell_custom_profit_under_profit_max_1 = 0.008
-    sell_custom_profit_under_rel_1 = 0.024
-    sell_custom_profit_under_rsi_diff_1 = 4.4
-
-    sell_custom_profit_under_profit_2 = 0.03
-    sell_custom_profit_under_rel_2 = 0.024
-    sell_custom_profit_under_rsi_diff_2 = 4.4
 
     # Under & near EMA200, take the loss
     sell_custom_stoploss_under_rel_1 = 0.002
@@ -1987,68 +1811,6 @@ class NostalgiaForInfinityNext(IStrategy):
     profit_target_1_enable = False
     #############################################################
 
-    plot_config = {
-        'main_plot': {
-            'ema_12_1h': { 'color': 'rgba(200,200,100,0.4)' },
-            'ema_15_1h': { 'color': 'rgba(200,180,100,0.4)' },
-            'ema_20_1h': { 'color': 'rgba(200,160,100,0.4)' },
-            'ema_25_1h': { 'color': 'rgba(200,140,100,0.4)' },
-            'ema_26_1h': { 'color': 'rgba(200,120,100,0.4)' },
-            'ema_35_1h': { 'color': 'rgba(200,100,100,0.4)' },
-            'ema_50_1h': { 'color': 'rgba(200,80,100,0.4)' },
-            'ema_100_1h': { 'color': 'rgba(200,60,100,0.4)' },
-            'ema_200_1h': { 'color': 'rgba(200,40,100,0.4)' },
-            'sma_200_1h': { 'color': 'rgba(150,20,100,0.4)' },
-            'pm': { 'color': 'rgba(100,20,100,0.5)' }
-        },
-        'subplots': {
-            'buy tag': { 'buy_tag': {'color': 'green'} },
-            'RSI/BTC': {
-                'btc_not_downtrend_1h': { 'color': 'yellow' },
-                'btc_rsi_14_1h': { 'color': 'green' },
-                'rsi_14_1h': { 'color': '#f41cd1' },
-                'crsi': {'color': 'blue' }
-            },
-            'pump': {
-                'cti_1h': {'color': 'pink' },
-                'safe_pump_24_10_1h': {'color': '#481110' },
-                'safe_pump_24_20_1h': {'color': '#481120' },
-                'safe_pump_24_30_1h': {'color': '#481130' },
-                'safe_pump_24_40_1h': {'color': '#481140' },
-                'safe_pump_24_50_1h': {'color': '#481150' },
-                'safe_pump_24_60_1h': {'color': '#481160' },
-                'safe_pump_24_70_1h': {'color': '#481170' },
-                'safe_pump_24_80_1h': {'color': '#481180' },
-                'safe_pump_24_90_1h': {'color': '#481190' },
-                'safe_pump_24_100_1h': {'color': '#4811A0' },
-                'safe_pump_24_120_1h': {'color': '#4811C0' },
-                'safe_pump_36_10_1h': {'color': '#721110' },
-                'safe_pump_36_20_1h': {'color': '#721120' },
-                'safe_pump_36_30_1h': {'color': '#721130' },
-                'safe_pump_36_40_1h': {'color': '#721140' },
-                'safe_pump_36_50_1h': {'color': '#721150' },
-                'safe_pump_36_60_1h': {'color': '#721160' },
-                'safe_pump_36_70_1h': {'color': '#721170' },
-                'safe_pump_36_80_1h': {'color': '#721180' },
-                'safe_pump_36_90_1h': {'color': '#721190' },
-                'safe_pump_36_100_1h': {'color': '#7211A0' },
-                'safe_pump_36_120_1h': {'color': '#7211C0' },
-                'safe_pump_48_10_1h': {'color': '#961110' },
-                'safe_pump_48_20_1h': {'color': '#961120' },
-                'safe_pump_48_30_1h': {'color': '#961130' },
-                'safe_pump_48_40_1h': {'color': '#961140' },
-                'safe_pump_48_50_1h': {'color': '#961150' },
-                'safe_pump_48_60_1h': {'color': '#961160' },
-                'safe_pump_48_70_1h': {'color': '#961170' },
-                'safe_pump_48_80_1h': {'color': '#961180' },
-                'safe_pump_48_90_1h': {'color': '#961190' },
-                'safe_pump_48_100_1h': {'color': '#9611A0' },
-                'safe_pump_48_120_1h': {'color': '#9611C0' }
-            }
-        }
-    }
-
-    #############################################################
     # CACHES
 
     hold_trades_cache = None
@@ -2996,14 +2758,42 @@ class NostalgiaForInfinityNext(IStrategy):
         return False, None
 
     def sell_trail_main(self, current_profit: float, last_candle, max_profit: float) -> tuple:
-        if (self.sell_trail_profit_max_1 > current_profit >= self.sell_trail_profit_min_1) and (self.sell_trail_rsi_min_1 < last_candle['rsi_14'] < self.sell_trail_rsi_max_1) and (max_profit > (current_profit + self.sell_trail_down_1)) and (last_candle['moderi_96'] == False):
-            return True, 'signal_profit_t_1'
-        elif (self.sell_trail_profit_max_2 > current_profit >= self.sell_trail_profit_min_2) and (self.sell_trail_rsi_min_2 < last_candle['rsi_14'] < self.sell_trail_rsi_max_2) and (max_profit > (current_profit + self.sell_trail_down_2)) and (last_candle['ema_25'] < last_candle['ema_50']):
-            return True, 'signal_profit_t_2'
-        elif (self.sell_trail_profit_max_3 > current_profit >= self.sell_trail_profit_min_3) and (max_profit > (current_profit + self.sell_trail_down_3)) and (last_candle['sma_200_dec_20_1h']):
-            return True, 'signal_profit_t_3'
-        elif (self.sell_trail_profit_max_4 > current_profit >= self.sell_trail_profit_min_4) and (max_profit > (current_profit + self.sell_trail_down_4)) and (last_candle['sma_200_dec_24']) and (last_candle['cmf'] < 0.0):
-            return True, 'signal_profit_t_4'
+        if 0.02 > current_profit >= 0.01:
+            if (max_profit > (current_profit + 0.03)) and (last_candle['rsi_14'] < 50.0) and (last_candle['rsi_14'] < previous_candle_1['rsi_14']) and (last_candle['rsi_14_1h'] < 50.0):
+                return True, 'sell_profit_t_1_x'
+        elif 0.03 > current_profit >= 0.02:
+            if (max_profit > (current_profit + 0.03)) and (last_candle['rsi_14'] < 50.0) and (last_candle['rsi_14'] < previous_candle_1['rsi_14']) and (last_candle['rsi_14_1h'] < 50.0):
+                return True, 'sell_profit_t_2_x'
+        elif 0.04 > current_profit >= 0.03:
+            if (max_profit > (current_profit + 0.03)) and (last_candle['rsi_14'] < 50.0) and (last_candle['rsi_14'] < previous_candle_1['rsi_14']) and (last_candle['rsi_14_1h'] < 50.0):
+                return True, 'sell_profit_t_3_x'
+        elif 0.05 > current_profit >= 0.04:
+            if (max_profit > (current_profit + 0.03)) and (last_candle['rsi_14'] < 50.0) and (last_candle['rsi_14'] < previous_candle_1['rsi_14']) and (last_candle['rsi_14_1h'] < 50.0):
+                return True, 'sell_profit_t_4_x'
+        elif 0.06 > current_profit >= 0.05:
+            if (max_profit > (current_profit + 0.03)) and (last_candle['rsi_14'] < 50.0) and (last_candle['rsi_14'] < previous_candle_1['rsi_14']) and (last_candle['rsi_14_1h'] < 50.0):
+                return True, 'sell_profit_t_5_x'
+        elif 0.07 > current_profit >= 0.06:
+            if (max_profit > (current_profit + 0.03)) and (last_candle['rsi_14'] < 50.0) and (last_candle['rsi_14'] < previous_candle_1['rsi_14']) and (last_candle['rsi_14_1h'] < 50.0):
+                return True, 'sell_profit_t_6_x'
+        elif 0.08 > current_profit >= 0.07:
+            if (max_profit > (current_profit + 0.03)) and (last_candle['rsi_14'] < 50.0) and (last_candle['rsi_14'] < previous_candle_1['rsi_14']) and (last_candle['rsi_14_1h'] < 50.0):
+                return True, 'sell_profit_t_7_x'
+        elif 0.09 > current_profit >= 0.08:
+            if (max_profit > (current_profit + 0.03)) and (last_candle['rsi_14'] < 50.0) and (last_candle['rsi_14'] < previous_candle_1['rsi_14']) and (last_candle['rsi_14_1h'] < 50.0):
+                return True, 'sell_profit_t_8_x'
+        elif 0.1 > current_profit >= 0.09:
+            if (max_profit > (current_profit + 0.03)) and (last_candle['rsi_14'] < 50.0) and (last_candle['rsi_14'] < previous_candle_1['rsi_14']) and (last_candle['rsi_14_1h'] < 50.0):
+                return True, 'sell_profit_t_9_x'
+        elif 0.12 > current_profit >= 0.1:
+            if (max_profit > (current_profit + 0.03)) and (last_candle['rsi_14'] < 50.0) and (last_candle['rsi_14'] < previous_candle_1['rsi_14']) and (last_candle['rsi_14_1h'] < 50.0):
+                return True, 'sell_profit_t_10_x'
+        elif 0.2 > current_profit >= 0.12:
+            if (max_profit > (current_profit + 0.03)) and (last_candle['rsi_14'] < 50.0) and (last_candle['rsi_14'] < previous_candle_1['rsi_14']) and (last_candle['rsi_14_1h'] < 50.0):
+                return True, 'sell_profit_t_11_x'
+        elif current_profit >= 0.2:
+            if (max_profit > (current_profit + 0.03)) and (last_candle['rsi_14'] < 50.0) and (last_candle['rsi_14'] < previous_candle_1['rsi_14']) and (last_candle['rsi_14_1h'] < 50.0):
+                return True, 'sell_profit_t_12_x'
 
         return False, None
 
@@ -3014,18 +2804,6 @@ class NostalgiaForInfinityNext(IStrategy):
 
         elif (self.sell_custom_long_profit_min_1 < current_profit < self.sell_custom_long_profit_max_1) and (current_time - timedelta(minutes=self.sell_custom_long_duration_min_1) > trade.open_date_utc):
             return True, 'signal_profit_l_1'
-
-        return False, None
-
-    def sell_under_min(self, current_profit: float, last_candle) -> tuple:
-        if ((last_candle['moderi_96']) == False):
-            # Downtrend
-            if (self.sell_custom_profit_under_profit_max_1 > current_profit >= self.sell_custom_profit_under_profit_min_1) and (last_candle['close'] < last_candle['ema_200']) and (((last_candle['ema_200'] - last_candle['close']) / last_candle['close']) < self.sell_custom_profit_under_rel_1) and (last_candle['rsi_14'] > last_candle['rsi_14_1h'] + self.sell_custom_profit_under_rsi_diff_1):
-                return True, 'signal_profit_u_e_1'
-        else:
-            # Uptrend
-            if (current_profit >= self.sell_custom_profit_under_profit_2) and (last_candle['close'] < last_candle['ema_200']) and (((last_candle['ema_200'] - last_candle['close']) / last_candle['close']) < self.sell_custom_profit_under_rel_2) and (last_candle['rsi_14'] > last_candle['rsi_14_1h'] + self.sell_custom_profit_under_rsi_diff_2):
-                return True, 'signal_profit_u_e_2'
 
         return False, None
 
@@ -3494,11 +3272,6 @@ class NostalgiaForInfinityNext(IStrategy):
         if sell and (signal_name is not None):
             return f"{signal_name} ( {buy_tag} )"
 
-        # Under EMA200, exit with any profit
-        sell, signal_name = self.sell_under_min(current_profit, last_candle)
-        if sell and (signal_name is not None):
-            return f"{signal_name} ( {buy_tag} )"
-
         # Stoplosses_doom
         sell, signal_name = self.sell_stoploss_doom(current_profit, last_candle, previous_candle_1, trade, current_time)
         if sell and (signal_name is not None):
@@ -3563,79 +3336,6 @@ class NostalgiaForInfinityNext(IStrategy):
         pair, mark_signal = self.mark_profit_target(pair, trade, current_time, current_rate, current_profit, last_candle, previous_candle_1)
         if pair:
             self._set_profit_target(pair, mark_signal, current_rate, current_time)
-
-        # Sell signal 1
-        if self.sell_condition_1_enable and (last_candle['rsi_14'] > self.sell_rsi_bb_1) and (last_candle['close'] > last_candle['bb20_2_upp']) and (previous_candle_1['close'] > previous_candle_1['bb20_2_upp']) and (previous_candle_2['close'] > previous_candle_2['bb20_2_upp']) and (previous_candle_3['close'] > previous_candle_3['bb20_2_upp']) and (previous_candle_4['close'] > previous_candle_4['bb20_2_upp']) and (previous_candle_5['close'] > previous_candle_5['bb20_2_upp']):
-            if (last_candle['close'] > last_candle['ema_200']):
-                if (current_profit > 0.01):
-                    return f"sell_signal_1_1_1 ( {buy_tag} )"
-            else:
-                if (current_profit > 0.01):
-                    return f"sell_signal_1_2_1 ( {buy_tag} )"
-                elif (max_loss > 0.25):
-                    return f"sell_signal_1_2_2 ( {buy_tag} )"
-
-        # Sell signal 2
-        elif (self.sell_condition_2_enable) and (last_candle['rsi_14'] > self.sell_rsi_bb_2) and (last_candle['close'] > last_candle['bb20_2_upp']) and (previous_candle_1['close'] > previous_candle_1['bb20_2_upp']) and (previous_candle_2['close'] > previous_candle_2['bb20_2_upp']):
-            if (last_candle['close'] > last_candle['ema_200']):
-                if (current_profit > 0.01):
-                    return f"sell_signal_2_1_1 ( {buy_tag} )"
-            else:
-                if (current_profit > 0.01):
-                    return f"sell_signal_2_2_1 ( {buy_tag} )"
-                elif (max_loss > 0.25):
-                    return f"sell_signal_2_2_2 ( {buy_tag} )"
-
-        # Sell signal 3
-        elif (self.sell_condition_3_enable) and (last_candle['rsi_14'] > self.sell_rsi_main_3):
-            if (last_candle['close'] > last_candle['ema_200']):
-                if (current_profit > 0.01):
-                    return f"sell_signal_3_1_1 ( {buy_tag} )"
-            else:
-                if (current_profit > 0.01):
-                    return f"sell_signal_3_2_1 ( {buy_tag} )"
-                elif (max_loss > 0.25):
-                    return f"sell_signal_3_2_2 ( {buy_tag} )"
-
-        # Sell signal 4
-        elif self.sell_condition_4_enable and (last_candle['rsi_14'] > self.sell_dual_rsi_rsi_4) and (last_candle['rsi_14_1h'] > self.sell_dual_rsi_rsi_1h_4):
-            if (last_candle['close'] > last_candle['ema_200']):
-                if (current_profit > 0.01):
-                    return f"sell_signal_4_1_1 ( {buy_tag} )"
-            else:
-                if (current_profit > 0.01):
-                    return f"sell_signal_4_2_1 ( {buy_tag} )"
-                elif (max_loss > 0.25):
-                    return f"sell_signal_4_2_2 ( {buy_tag} )"
-
-        # Sell signal 6
-        elif self.sell_condition_6_enable and (last_candle['close'] < last_candle['ema_200']) and (last_candle['close'] > last_candle['ema_50']) and (last_candle['rsi_14'] > self.sell_rsi_under_6):
-            if (current_profit > 0.01):
-                return f"sell_signal_6_1 ( {buy_tag} )"
-            elif (max_loss > 0.25):
-                return f"sell_signal_6_2 ( {buy_tag} )"
-
-        # Sell signal 7
-        elif self.sell_condition_7_enable and (last_candle['rsi_14_1h'] > self.sell_rsi_1h_7) and (last_candle['crossed_below_ema_12_26']):
-            if (last_candle['close'] > last_candle['ema_200']):
-                if (current_profit > 0.01):
-                    return f"sell_signal_7_1_1 ( {buy_tag} )"
-            else:
-                if (current_profit > 0.01):
-                    return f"sell_signal_7_2_1 ( {buy_tag} )"
-                elif (max_loss > 0.25):
-                    return f"sell_signal_7_2_2 ( {buy_tag} )"
-
-        # Sell signal 8
-        elif self.sell_condition_8_enable and (last_candle['close'] > last_candle['bb20_2_upp_1h'] * self.sell_bb_relative_8):
-            if (last_candle['close'] > last_candle['ema_200']):
-                if (current_profit > 0.01):
-                    return f"sell_signal_8_1_1 ( {buy_tag} )"
-            else:
-                if (current_profit > 0.01):
-                    return f"sell_signal_8_2_1 ( {buy_tag} )"
-                elif (max_loss > 0.25):
-                    return f"sell_signal_8_2_2 ( {buy_tag} )"
 
         return None
 
