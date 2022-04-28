@@ -141,7 +141,7 @@ class NostalgiaForInfinityNext(IStrategy):
     position_adjustment_enable = True
     max_rebuy_orders = 2
     max_rebuy_multiplier = 1.0
-    rebuy_pcts = (-0.08, -0.12)
+    rebuy_pcts = (-0.04, -0.06)
 
     # Report populate_indicators loop time per pair
     has_loop_perf_logging = False
@@ -1919,8 +1919,8 @@ class NostalgiaForInfinityNext(IStrategy):
     sell_trail_down_4 = 0.02
 
     # Under & near EMA200, accept profit
-    sell_custom_profit_under_profit_min_1 = 0.001
-    sell_custom_profit_under_profit_max_1 = 0.008
+    sell_custom_profit_under_profit_min_1 = 0.02
+    sell_custom_profit_under_profit_max_1 = 0.03
     sell_custom_profit_under_rel_1 = 0.024
     sell_custom_profit_under_rsi_diff_1 = 4.4
 
@@ -2144,7 +2144,7 @@ class NostalgiaForInfinityNext(IStrategy):
         :return float: Stake amount to adjust your trade
         """
 
-        if (self.config['position_adjustment_enable'] == False) or (current_profit > -0.08):
+        if (self.config['position_adjustment_enable'] == False) or (current_profit > -0.04):
             return None
 
         dataframe, _ = self.dp.get_analyzed_dataframe(trade.pair, self.timeframe)
@@ -3532,7 +3532,7 @@ class NostalgiaForInfinityNext(IStrategy):
 
     def sell_stoploss_doom(self, current_profit: float, last_candle, previous_candle_1, trade: 'Trade', current_time: 'datetime') -> tuple:
         if (
-                (current_profit < -0.15)
+                (current_profit < -0.1)
                 and (last_candle['close'] < last_candle['ema_200'])
                 and (last_candle['close'] < (last_candle['ema_200'] - last_candle['atr']))
                 and (last_candle['sma_200_dec_20'])
