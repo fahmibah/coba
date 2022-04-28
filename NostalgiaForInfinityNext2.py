@@ -3496,43 +3496,17 @@ class NostalgiaForInfinityNext(IStrategy):
 
         return False, None
 
-    def sell_trail(self, current_profit: float, max_profit: float, max_loss: float, last_candle, previous_candle_1, trade: 'Trade', current_time: 'datetime') -> tuple:
-        if 0.02 > current_profit >= 0.01:
-            if (max_profit > (current_profit + 0.03)) and (last_candle['rsi_14'] < 50.0) and (last_candle['rsi_14'] < previous_candle_1['rsi_14']) and (last_candle['rsi_14_1h'] < 50.0):
-                return True, 'sell_profit_t_1_x'
-        elif 0.03 > current_profit >= 0.02:
-            if (max_profit > (current_profit + 0.03)) and (last_candle['rsi_14'] < 50.0) and (last_candle['rsi_14'] < previous_candle_1['rsi_14']) and (last_candle['rsi_14_1h'] < 50.0):
-                return True, 'sell_profit_t_2_x'
-        elif 0.04 > current_profit >= 0.03:
-            if (max_profit > (current_profit + 0.03)) and (last_candle['rsi_14'] < 50.0) and (last_candle['rsi_14'] < previous_candle_1['rsi_14']) and (last_candle['rsi_14_1h'] < 50.0):
-                return True, 'sell_profit_t_3_x'
-        elif 0.05 > current_profit >= 0.04:
-            if (max_profit > (current_profit + 0.03)) and (last_candle['rsi_14'] < 50.0) and (last_candle['rsi_14'] < previous_candle_1['rsi_14']) and (last_candle['rsi_14_1h'] < 50.0):
-                return True, 'sell_profit_t_4_x'
-        elif 0.06 > current_profit >= 0.05:
-            if (max_profit > (current_profit + 0.03)) and (last_candle['rsi_14'] < 50.0) and (last_candle['rsi_14'] < previous_candle_1['rsi_14']) and (last_candle['rsi_14_1h'] < 50.0):
-                return True, 'sell_profit_t_5_x'
-        elif 0.07 > current_profit >= 0.06:
-            if (max_profit > (current_profit + 0.03)) and (last_candle['rsi_14'] < 50.0) and (last_candle['rsi_14'] < previous_candle_1['rsi_14']) and (last_candle['rsi_14_1h'] < 50.0):
-                return True, 'sell_profit_t_6_x'
-        elif 0.08 > current_profit >= 0.07:
-            if (max_profit > (current_profit + 0.03)) and (last_candle['rsi_14'] < 50.0) and (last_candle['rsi_14'] < previous_candle_1['rsi_14']) and (last_candle['rsi_14_1h'] < 50.0):
-                return True, 'sell_profit_t_7_x'
-        elif 0.09 > current_profit >= 0.08:
-            if (max_profit > (current_profit + 0.03)) and (last_candle['rsi_14'] < 50.0) and (last_candle['rsi_14'] < previous_candle_1['rsi_14']) and (last_candle['rsi_14_1h'] < 50.0):
-                return True, 'sell_profit_t_8_x'
-        elif 0.1 > current_profit >= 0.09:
-            if (max_profit > (current_profit + 0.03)) and (last_candle['rsi_14'] < 50.0) and (last_candle['rsi_14'] < previous_candle_1['rsi_14']) and (last_candle['rsi_14_1h'] < 50.0):
-                return True, 'sell_profit_t_9_x'
-        elif 0.12 > current_profit >= 0.1:
-            if (max_profit > (current_profit + 0.03)) and (last_candle['rsi_14'] < 50.0) and (last_candle['rsi_14'] < previous_candle_1['rsi_14']) and (last_candle['rsi_14_1h'] < 50.0):
-                return True, 'sell_profit_t_10_x'
-        elif 0.2 > current_profit >= 0.12:
-            if (max_profit > (current_profit + 0.03)) and (last_candle['rsi_14'] < 50.0) and (last_candle['rsi_14'] < previous_candle_1['rsi_14']) and (last_candle['rsi_14_1h'] < 50.0):
-                return True, 'sell_profit_t_11_x'
-        elif current_profit >= 0.2:
-            if (max_profit > (current_profit + 0.03)) and (last_candle['rsi_14'] < 50.0) and (last_candle['rsi_14'] < previous_candle_1['rsi_14']) and (last_candle['rsi_14_1h'] < 50.0):
-                return True, 'sell_profit_t_12_x'
+    def sell_trail_main(self, current_profit: float, last_candle, max_profit: float) -> tuple:
+        if (self.sell_trail_profit_max_1 > current_profit >= self.sell_trail_profit_min_1) and (self.sell_trail_rsi_min_1 < last_candle['rsi_14'] < self.sell_trail_rsi_max_1) and (max_profit > (current_profit + self.sell_trail_down_1)) and (last_candle['moderi_96'] == False):
+            return True, 'signal_profit_t_1'
+        elif (self.sell_trail_profit_max_2 > current_profit >= self.sell_trail_profit_min_2) and (self.sell_trail_rsi_min_2 < last_candle['rsi_14'] < self.sell_trail_rsi_max_2) and (max_profit > (current_profit + self.sell_trail_down_2)) and (last_candle['ema_25'] < last_candle['ema_50']):
+            return True, 'signal_profit_t_2'
+        elif (self.sell_trail_profit_max_3 > current_profit >= self.sell_trail_profit_min_3) and (max_profit > (current_profit + self.sell_trail_down_3)) and (last_candle['sma_200_dec_20_1h']):
+            return True, 'signal_profit_t_3'
+        elif (self.sell_trail_profit_max_4 > current_profit >= self.sell_trail_profit_min_4) and (max_profit > (current_profit + self.sell_trail_down_4)) and (last_candle['sma_200_dec_24']) and (last_candle['cmf'] < 0.0):
+            return True, 'signal_profit_t_4'
+
+        return False, None
 
     def sell_duration_main(self, current_profit: float, last_candle, trade: 'Trade', current_time: 'datetime') -> tuple:
         # Pumped pair, short duration
@@ -3941,8 +3915,13 @@ class NostalgiaForInfinityNext(IStrategy):
         buy_tag = 'empty'
         if hasattr(trade, 'buy_tag') and trade.buy_tag is not None:
             buy_tag = trade.buy_tag
+        else:
+            trade_open_date = timeframe_to_prev_date(self.timeframe, trade.open_date_utc)
+            buy_signal = dataframe.loc[dataframe['date'] < trade_open_date]
+            if not buy_signal.empty:
+                buy_signal_candle = buy_signal.iloc[-1]
+                buy_tag = buy_signal_candle['buy_tag'] if buy_signal_candle['buy_tag'] != '' else 'empty'
         buy_tags = buy_tag.split()
-
         max_profit = ((trade.max_rate - trade.open_rate) / trade.open_rate)
         max_loss = ((trade.open_rate - trade.min_rate) / trade.min_rate)
 
@@ -4007,9 +3986,9 @@ class NostalgiaForInfinityNext(IStrategy):
             return f"{signal_name} ( {buy_tag} )"
 
         # Trailing
-        sell, signal_name = self.sell_trail(current_profit, max_profit, max_loss, last_candle, previous_candle_1, trade, current_time)
+        sell, signal_name = self.sell_trail_main(current_profit, last_candle, max_profit)
         if sell and (signal_name is not None):
-            return f"{signal_name} ( {buy_tag})"
+            return f"{signal_name} ( {buy_tag} )"
 
         # Duration based
         sell, signal_name = self.sell_duration_main(current_profit, last_candle, trade, current_time)
