@@ -1919,8 +1919,8 @@ class NostalgiaForInfinityNext(IStrategy):
     sell_trail_down_4 = 0.02
 
     # Under & near EMA200, accept profit
-    sell_custom_profit_under_profit_min_1 = 0.02
-    sell_custom_profit_under_profit_max_1 = 0.03
+    sell_custom_profit_under_profit_min_1 = 0.01
+    sell_custom_profit_under_profit_max_1 = 0.02
     sell_custom_profit_under_rel_1 = 0.024
     sell_custom_profit_under_rsi_diff_1 = 4.4
 
@@ -1971,7 +1971,7 @@ class NostalgiaForInfinityNext(IStrategy):
 
     # Recover
     sell_custom_recover_profit_1 = 0.06
-    sell_custom_recover_min_loss_1 = 0.12
+    sell_custom_recover_min_loss_1 = 0.06
 
     sell_custom_recover_profit_min_2 = 0.01
     sell_custom_recover_profit_max_2 = 0.05
