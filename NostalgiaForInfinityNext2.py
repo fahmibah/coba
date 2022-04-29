@@ -2149,13 +2149,7 @@ class NostalgiaForInfinityNext(IStrategy):
         dataframe, _ = self.dp.get_analyzed_dataframe(trade.pair, self.timeframe)
         last_candle = dataframe.iloc[-1].squeeze()
         previous_candle = dataframe.iloc[-2].squeeze()
-
         # simple TA checks, to assure that the price is not dropping rapidly
-        if (
-                # drop in the last candle
-                ((last_candle['tpct_change_0'] > 0.018) and (last_candle['close'] < last_candle['open']))
-        ):
-            return None
 
         if (
                 (last_candle['crsi_1h'] < 20.0)
