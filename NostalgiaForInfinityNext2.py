@@ -2157,18 +2157,14 @@ class NostalgiaForInfinityNext(IStrategy):
         ):
             return None
 
+        if (
+                (last_candle['crsi_1h'] < 20.0)
+                or (last_candle['crsi'] < 12.0)
+        ):
+            return None
+
         filled_buys = trade.select_filled_orders('buy')
         count_of_buys = len(filled_buys)
-
-        if (count_of_buys == 1):
-            if (
-                    (current_profit < -0.08)
-                    and (
-                        (last_candle['crsi'] < 12.0)
-                        or (last_candle['btc_not_downtrend_1h'] == False)
-                    )
-            ):
-                return None
 
         # Log if the last candle triggered a buy signal, even if max rebuys reached
         if last_candle['buy'] == 1 and self.dp.runmode.value in ('backtest','dry_run'):
@@ -3904,18 +3900,8 @@ class NostalgiaForInfinityNext(IStrategy):
         if hasattr(trade, 'buy_tag') and trade.buy_tag is not None:
             buy_tag = trade.buy_tag
         buy_tags = buy_tag.split()
-
         max_profit = ((trade.max_rate - trade.open_rate) / trade.open_rate)
         max_loss = ((trade.open_rate - trade.min_rate) / trade.min_rate)
-
-        if hasattr(trade, 'select_filled_orders'):
-            filled_buys = trade.select_filled_orders('buy')
-            count_of_buys = len(filled_buys)
-            if count_of_buys > 1:
-                initial_buy = filled_buys[0]
-                if (initial_buy is not None and initial_buy.average is not None):
-                    max_profit = ((trade.max_rate - initial_buy.average) / initial_buy.average)
-                    max_loss = ((initial_buy.average - trade.min_rate) / trade.min_rate)
 
         # Long mode
         if all(c in ['45', '46', '47'] for c in buy_tags):
