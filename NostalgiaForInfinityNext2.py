@@ -141,8 +141,7 @@ class NostalgiaForInfinityNext(IStrategy):
     position_adjustment_enable = True
     max_rebuy_orders = 2
     max_rebuy_multiplier = 1.0
-    rebuy_pcts = (-0.04, -0.06)
-
+    
     # Report populate_indicators loop time per pair
     has_loop_perf_logging = False
 
@@ -2144,14 +2143,13 @@ class NostalgiaForInfinityNext(IStrategy):
         :return float: Stake amount to adjust your trade
         """
 
-        if (self.config['position_adjustment_enable'] == False) or (current_profit > -0.04):
+        if (self.position_adjustment_enable == False) or (current_profit > -0.03):
             return None
 
         dataframe, _ = self.dp.get_analyzed_dataframe(trade.pair, self.timeframe)
-        if(len(dataframe) < 2):
-            return None
         last_candle = dataframe.iloc[-1].squeeze()
         previous_candle = dataframe.iloc[-2].squeeze()
+
         # simple TA checks, to assure that the price is not dropping rapidly
         if (
                 # drop in the last candle
@@ -2159,34 +2157,44 @@ class NostalgiaForInfinityNext(IStrategy):
         ):
             return None
 
-        count_of_buys = 0
         filled_buys = trade.select_filled_orders('buy')
         count_of_buys = len(filled_buys)
 
-        if (count_of_buys == 0):
-            return None
-
         if (count_of_buys == 1):
             if (
-                    (current_profit < self.rebuy_pcts[0])
+                    (current_profit > -0.04)
                     and (
-                        (last_candle['crsi'] > 12.0)
-                        and (last_candle['btc_not_downtrend_1h'] == True)
+                        (last_candle['crsi'] < 12.0)
+                        and (last_candle['btc_not_downtrend_1h'] == False)
                     )
             ):
                 return None
         elif (count_of_buys == 2):
             if (
-                    (current_profit < self.rebuy_pcts[1])
+                    (current_profit > -0.06)
+                    or (
+                        (last_candle['crsi'] < 20.0)
+                        or (last_candle['crsi_1h'] < 11.0)
+                        and (last_candle['btc_not_downtrend_1h'] == False)
+                    )
+            ):
+                return None
+        elif (count_of_buys == 3):
+            if (
+                    (current_profit > -0.08)
                     and (
-                        (last_candle['crsi'] > 20.0)
-                        and (last_candle['crsi_1h'] > 11.0)
-                        and (last_candle['btc_not_downtrend_1h'] == True)
+                        (last_candle['crsi'] < 20.0)
+                        and (last_candle['crsi_1h'] < 12.0)
+                        and (last_candle['btc_not_downtrend_1h'] == False)
                     )
             ):
                 return None
 
-        # Maximum 2 rebuys, equal stake as the original
+        # Log if the last candle triggered a buy signal, even if max rebuys reached
+        if last_candle['buy'] == 1 and self.dp.runmode.value in ('backtest','dry_run'):
+            log.info(f"Rebuy: a buy tag found for pair {trade.pair}")
+
+        # Maximum 2 rebuys. Half the stake of the original.
         if 0 < count_of_buys <= self.max_rebuy_orders:
             try:
                 # This returns first order stake size
@@ -3915,29 +3923,19 @@ class NostalgiaForInfinityNext(IStrategy):
         buy_tag = 'empty'
         if hasattr(trade, 'buy_tag') and trade.buy_tag is not None:
             buy_tag = trade.buy_tag
-        else:
-            trade_open_date = timeframe_to_prev_date(self.timeframe, trade.open_date_utc)
-            buy_signal = dataframe.loc[dataframe['date'] < trade_open_date]
-            if not buy_signal.empty:
-                buy_signal_candle = buy_signal.iloc[-1]
-                buy_tag = buy_signal_candle['buy_tag'] if buy_signal_candle['buy_tag'] != '' else 'empty'
         buy_tags = buy_tag.split()
+
         max_profit = ((trade.max_rate - trade.open_rate) / trade.open_rate)
         max_loss = ((trade.open_rate - trade.min_rate) / trade.min_rate)
 
         if hasattr(trade, 'select_filled_orders'):
-            count_of_buys = 1
-            if (hasattr(trade, 'enter_side')):
-                filled_buys = trade.select_filled_orders(trade.enter_side)
-                count_of_buys = trade.nr_of_successful_entries
-            else:
-                filled_buys = trade.select_filled_orders('buy')
-                count_of_buys = len(filled_buys)
+            filled_buys = trade.select_filled_orders('buy')
+            count_of_buys = len(filled_buys)
             if count_of_buys > 1:
-                initial_entry = filled_buys[0]
-                if (initial_entry is not None and initial_entry.average is not None):
-                    max_profit = ((trade.max_rate - initial_entry.average) / initial_entry.average)
-                    max_loss = ((initial_entry.average - trade.min_rate) / trade.min_rate)
+                initial_buy = filled_buys[0]
+                if (initial_buy is not None and initial_buy.average is not None):
+                    max_profit = ((trade.max_rate - initial_buy.average) / initial_buy.average)
+                    max_loss = ((initial_buy.average - trade.min_rate) / trade.min_rate)
 
         # Long mode
         if all(c in ['45', '46', '47'] for c in buy_tags):
