@@ -139,9 +139,9 @@ class NostalgiaForInfinityNext(IStrategy):
 
     # Rebuy feature
     position_adjustment_enable = True
-    max_rebuy_orders = 2
+    max_rebuy_orders = 1
     max_rebuy_multiplier = 1.0
-    
+
     # Report populate_indicators loop time per pair
     has_loop_perf_logging = False
 
@@ -2143,7 +2143,7 @@ class NostalgiaForInfinityNext(IStrategy):
         :return float: Stake amount to adjust your trade
         """
 
-        if (self.position_adjustment_enable == False) or (current_profit > -0.03):
+        if (self.position_adjustment_enable == False) or (current_profit > -0.08):
             return None
 
         dataframe, _ = self.dp.get_analyzed_dataframe(trade.pair, self.timeframe)
@@ -2162,30 +2162,10 @@ class NostalgiaForInfinityNext(IStrategy):
 
         if (count_of_buys == 1):
             if (
-                    (current_profit > -0.04)
+                    (current_profit < -0.08)
                     and (
                         (last_candle['crsi'] < 12.0)
-                        and (last_candle['btc_not_downtrend_1h'] == False)
-                    )
-            ):
-                return None
-        elif (count_of_buys == 2):
-            if (
-                    (current_profit > -0.06)
-                    or (
-                        (last_candle['crsi'] < 20.0)
-                        or (last_candle['crsi_1h'] < 11.0)
-                        and (last_candle['btc_not_downtrend_1h'] == False)
-                    )
-            ):
-                return None
-        elif (count_of_buys == 3):
-            if (
-                    (current_profit > -0.08)
-                    and (
-                        (last_candle['crsi'] < 20.0)
-                        and (last_candle['crsi_1h'] < 12.0)
-                        and (last_candle['btc_not_downtrend_1h'] == False)
+                        or (last_candle['btc_not_downtrend_1h'] == False)
                     )
             ):
                 return None
@@ -2200,7 +2180,7 @@ class NostalgiaForInfinityNext(IStrategy):
                 # This returns first order stake size
                 stake_amount = filled_buys[0].cost
                 # This then calculates current safety order size
-                stake_amount = stake_amount * (0.35 + (count_of_buys * 0.005))
+                stake_amount = stake_amount
                 return stake_amount
             except Exception as exception:
                 return None
