@@ -2164,7 +2164,7 @@ class NostalgiaForInfinityNext(IStrategy):
 
     def sell_over_main(self, current_profit: float, last_candle) -> tuple:
         if last_candle['close'] > last_candle['ema_200']:
-            if ((last_candle['moderi_96']) == True):
+            if (last_candle['moderi_96']):
                 if current_profit >= 0.20:
                     if (last_candle['rsi_14'] < 39.0):
                         return True, 'sell_profit_o_bull_12_1'
@@ -2531,7 +2531,7 @@ class NostalgiaForInfinityNext(IStrategy):
 
     def sell_under_main(self, current_profit: float, last_candle) -> tuple:
         if last_candle['close'] < last_candle['ema_200']:
-            if ((last_candle['moderi_96']) == False):
+            if (last_candle['moderi_96']):
                 if current_profit >= 0.20:
                     if (last_candle['rsi_14'] < 41.0):
                         return True, 'sell_profit_u_bull_12_1'
@@ -2898,7 +2898,7 @@ class NostalgiaForInfinityNext(IStrategy):
 
     def sell_pump_main(self, current_profit: float, last_candle) -> tuple:
         if last_candle['sell_pump_48_1_1h']:
-            if ((last_candle['moderi_96']) == True):
+            if (last_candle['moderi_96']):
                 if current_profit >= 0.2:
                     if (last_candle['rsi_14'] < 42.0):
                         return True, 'sell_profit_p_bull_48_1_12_1'
@@ -2974,7 +2974,7 @@ class NostalgiaForInfinityNext(IStrategy):
                         return True, 'sell_profit_p_bear_48_1_1_1'
 
         if (last_candle['hl_pct_change_48_1h'] > 0.8):
-            if ((last_candle['moderi_96']) == True):
+            if (last_candle['moderi_96']):
                 if current_profit >= 0.2:
                     if (last_candle['rsi_14'] < 32.0) and (last_candle['cmf'] < -0.35):
                         return True, 'sell_profit_p_bull_48_2_12_1'
@@ -3050,7 +3050,7 @@ class NostalgiaForInfinityNext(IStrategy):
                         return True, 'sell_profit_p_bear_48_2_1_1'
 
         if (last_candle['hl_pct_change_48_1h'] > 0.5):
-            if ((last_candle['moderi_96']) == True):
+            if (last_candle['moderi_96']):
                 if current_profit >= 0.2:
                     if (last_candle['rsi_14'] < 32.0) and (last_candle['cmf'] < -0.35):
                         return True, 'sell_profit_p_bull_48_3_12_1'
@@ -3174,7 +3174,7 @@ class NostalgiaForInfinityNext(IStrategy):
                         return True, 'sell_profit_p_bear_48_3_1_2'
 
         if (last_candle['hl_pct_change_36_1h'] > 0.72):
-            if ((last_candle['moderi_96']) == True):
+            if (last_candle['moderi_96']):
                 if current_profit >= 0.2:
                     if (last_candle['rsi_14'] < 32.0):
                         return True, 'sell_profit_p_bull_36_1_12_1'
@@ -3250,7 +3250,7 @@ class NostalgiaForInfinityNext(IStrategy):
                         return True, 'sell_profit_p_bear_36_1_1_1'
 
         if (last_candle['hl_pct_change_24_1h'] > 0.68):
-            if ((last_candle['moderi_96']) == True):
+            if (last_candle['moderi_96']):
                 if current_profit >= 0.2:
                     if (last_candle['rsi_14'] < 41.0):
                         return True, 'sell_profit_p_bull_24_1_12_1'
@@ -3326,7 +3326,7 @@ class NostalgiaForInfinityNext(IStrategy):
                         return True, 'sell_profit_p_bear_24_1_1_1'
 
         if (last_candle['hl_pct_change_24_1h'] > 0.5):
-            if ((last_candle['moderi_96']) == True):
+            if (last_candle['moderi_96']):
                 if current_profit >= 0.2:
                     if (last_candle['r_14'] > -4.0) and (last_candle['rsi_14'] > 72.0) and (last_candle['cci'] > 240.0) and (last_candle['cmf_1h'] < -0.0):
                         return True, 'sell_profit_p_bull_24_2_12_1'
