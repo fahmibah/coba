@@ -2146,23 +2146,8 @@ class NostalgiaForInfinityNext(IStrategy):
         if (self.position_adjustment_enable == False) or (current_profit > -0.08):
             return None
 
-        dataframe, _ = self.dp.get_analyzed_dataframe(trade.pair, self.timeframe)
-        last_candle = dataframe.iloc[-1].squeeze()
-        previous_candle = dataframe.iloc[-2].squeeze()
-        # simple TA checks, to assure that the price is not dropping rapidly
-
-        if (
-                (last_candle['crsi_1h'] < 20.0)
-                or (last_candle['crsi'] < 12.0)
-        ):
-            return None
-
         filled_buys = trade.select_filled_orders('buy')
         count_of_buys = len(filled_buys)
-
-        # Log if the last candle triggered a buy signal, even if max rebuys reached
-        if last_candle['buy'] == 1 and self.dp.runmode.value in ('backtest','dry_run'):
-            log.info(f"Rebuy: a buy tag found for pair {trade.pair}")
 
         # Maximum 2 rebuys. Half the stake of the original.
         if 0 < count_of_buys <= self.max_rebuy_orders:
