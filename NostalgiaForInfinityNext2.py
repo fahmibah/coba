@@ -2164,7 +2164,7 @@ class NostalgiaForInfinityNext(IStrategy):
 
     def sell_over_main(self, current_profit: float, last_candle) -> tuple:
         if last_candle['close'] > last_candle['ema_200']:
-            if (last_candle['ema_vwma_osc_96']):
+            if (last_candle['moderi_96']):
                 if current_profit >= 0.20:
                     if (last_candle['rsi_14'] < 39.0):
                         return True, 'sell_profit_o_bull_12_1'
@@ -2531,7 +2531,7 @@ class NostalgiaForInfinityNext(IStrategy):
 
     def sell_under_main(self, current_profit: float, last_candle) -> tuple:
         if last_candle['close'] < last_candle['ema_200']:
-            if (last_candle['ema_vwma_osc_96'] > 0.0):
+            if (last_candle['moderi_96']):
                 if current_profit >= 0.20:
                     if (last_candle['rsi_14'] < 41.0):
                         return True, 'sell_profit_u_bull_12_1'
@@ -5470,11 +5470,6 @@ class NostalgiaForInfinityNext(IStrategy):
         # CCI
         dataframe['cci'] = ta.CCI(dataframe, source='hlc3', timeperiod=20)
 
-        # EMA of VWMA Oscillator
-        dataframe['ema_vwma_osc_32'] = ema_vwma_osc(dataframe, 32)
-        dataframe['ema_vwma_osc_64'] = ema_vwma_osc(dataframe, 64)
-        dataframe['ema_vwma_osc_96'] = ema_vwma_osc(dataframe, 96)
-
         # ATR
         dataframe['atr'] = ta.ATR(dataframe, timeperiod=14)
         dataframe['atr_high_thresh_1'] = (dataframe['high'] - (dataframe['atr'] * 5.4))
@@ -6381,10 +6376,6 @@ class NostalgiaForInfinityNext(IStrategy):
         if self.target_profit_cache is not None:
             self.target_profit_cache.data.pop(pair, None)
             self.target_profit_cache.save()
-
-    def ema_vwma_osc(dataframe, len_slow_ma):
-    slow_ema = Series(ta.EMA(vwma(dataframe, len_slow_ma), len_slow_ma))
-    return ((slow_ema - slow_ema.shift(1)) / slow_ema.shift(1)) * 100
 
     def _should_hold_trade(self, trade: "Trade", rate: float, sell_reason: str) -> bool:
         if self.config['runmode'].value not in ('live', 'dry_run'):
