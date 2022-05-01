@@ -2164,7 +2164,7 @@ class NostalgiaForInfinityNext(IStrategy):
 
     def sell_over_main(self, current_profit: float, last_candle) -> tuple:
         if last_candle['close'] > last_candle['ema_200']:
-            if (last_candle['moderi_96']):
+            if ((last_candle['moderi_96']) == True):
                 if current_profit >= 0.20:
                     if (last_candle['rsi_14'] < 30.0) and (last_candle['cmf'] < 0.0):
                         return True, 'sell_profit_o_bull_12_1'
@@ -2291,7 +2291,7 @@ class NostalgiaForInfinityNext(IStrategy):
 
     def sell_under_main(self, current_profit: float, last_candle) -> tuple:
         if last_candle['close'] < last_candle['ema_200']:
-            if (last_candle['moderi_96']):
+            if ((last_candle['moderi_96']) == True):
                 if current_profit >= 0.20:
                     if (last_candle['rsi_14'] < 41.0):
                         return True, 'sell_profit_u_bull_12_1'
